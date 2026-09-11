@@ -1,5 +1,4 @@
 #include "mangrove/command/Command.h"
-#include "mangrove/Mangrove.h"
 #include "mangrove/gui/GuiOverlay.h"
 
 
@@ -16,18 +15,28 @@ namespace {
 
 using ll::i18n_literals::operator""_tr;
 
-/// 本 mod 是客户端 mod（LL_PLAT_C），指令也要注册到客户端指令表，
-/// 这样连到别人的服务器上也能用。
-ll::command::CommandRegistrar& registrar() { return ll::command::CommandRegistrar::getClientInstance(); }
+/// 指令是否已经挂过了。`ClientCommandRegisterEvent` 可能触发多次，而 `overload()`
+/// 每次都会新增一个重载；LL 的 registrar 自己会把已登记的指令重新写进新的注册表，
+/// 所以挂一次就够。
+bool gRegistered{};
 
 } // namespace
 
 void registerMenuCommand() {
-    auto& handle = registrar().getOrCreateCommand("mangrove", "Open the Mangrove menu", CommandPermissionLevel::Any);
+    if (gRegistered) return;
+
+    // 本 mod 是客户端 mod，指令注册到客户端指令表，连别人的服务器也能用
+    auto& handle = ll::command::CommandRegistrar::getClientInstance().getOrCreateCommand(
+        "mangrove",
+        "mangrove.command.description"_tr(),
+        CommandPermissionLevel::Any
+    );
 
     handle.overload().execute([](::CommandOrigin const&, ::CommandOutput&) {
         gui::GuiOverlay::getInstance().setVisible(true);
     });
+
+    gRegistered = true;
 }
 
 } // namespace mangrove::command

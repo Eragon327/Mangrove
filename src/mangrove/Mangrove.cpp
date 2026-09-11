@@ -1,11 +1,12 @@
 #include "mangrove/Mangrove.h"
-
 #include "mangrove/command/Command.h"
 #include "mangrove/core/Feature.h"
 #include "mangrove/data/DataBase.h"
 #include "mangrove/gui/GuiOverlay.h"
 #include "mangrove/input/KeyInputManager.h"
 
+#include "ll/api/event/EventBus.h"
+#include "ll/api/event/command/ClientCommandRegisterEvent.h"
 #include "ll/api/i18n/I18n.h"
 #include "ll/api/mod/RegisterHelper.h"
 
@@ -15,7 +16,8 @@ namespace mangrove {
 
 /// mod 级资源。
 struct Mangrove::Impl {
-    data::DataBase mDataBase;
+    data::DataBase         mDataBase;
+    ll::event::ListenerPtr mClientCommandRegisterListener;
 };
 
 Mangrove::Mangrove() : impl(std::make_unique<Impl>()), mSelf(*ll::mod::NativeMod::current()) {}
@@ -47,6 +49,16 @@ bool Mangrove::load() {
     // 4) 功能：注册热键（会套上 DataBase 里存过的改键）
     core::FeatureManager::getInstance().install();
 
+    // 5) 指令：客户端重建指令表时会发这个事件，只有那时拿到的 CommandRegistry 才有效，
+    //    所以注册写在事件回调里，而不是 enable() 里直接调
+    impl->mClientCommandRegisterListener =
+        ll::event::EventBus::getInstance().emplaceListener<ll::event::ClientCommandRegisterEvent>(
+            [](ll::event::ClientCommandRegisterEvent&) { command::registerMenuCommand(); }
+        );
+    if (!impl->mClientCommandRegisterListener) {
+        logger.error("Failed to listen for the client command register event");
+    }
+
     return true;
 }
 
@@ -56,7 +68,6 @@ bool Mangrove::enable() {
         return false;
     }
 
-    command::registerMenuCommand();
     return true;
 }
 
@@ -68,6 +79,10 @@ bool Mangrove::disable() {
 }
 
 bool Mangrove::unload() {
+    if (impl->mClientCommandRegisterListener) {
+        ll::event::EventBus::getInstance().removeListener(impl->mClientCommandRegisterListener);
+        impl->mClientCommandRegisterListener.reset();
+    }
     input::KeyInputManager::getInstance().uninstall();
     getDataBase().close();
     return true;

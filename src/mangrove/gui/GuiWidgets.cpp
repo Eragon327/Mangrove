@@ -3,14 +3,13 @@
 #include "mangrove/gui/GuiOverlay.h"
 #include "mangrove/input/KeyInputManager.h"
 
-
-
 #include "ll/api/i18n/I18n.h"
 
 #include "imgui.h"
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -18,6 +17,17 @@ namespace mangrove::gui {
 namespace {
 
 using ll::i18n_literals::operator""_tr;
+
+/// 滑条最多占行宽的这个比例，剩下的留给标签
+constexpr float kSliderRowRatio = 0.45f;
+/// 滑条自身的宽度上限（行再宽也不把它拉长）
+constexpr float kMaxSliderWidth = 260.0f;
+
+MenuPage gActivePage = MenuPage::Toggles;
+
+/// 当前行的左右边界，由 beginRow() 记录
+float gRowLeft{};
+float gRowRight{};
 
 /// 虚拟键码 -> 系统本地化的按键名（"X"、"Ctrl"、"左 Shift" …）
 std::string virtualKeyName(int vk) {
@@ -74,63 +84,101 @@ std::vector<int> currentKeys(std::string_view bindingName) {
     return {};
 }
 
-/// 右侧控件宽度：别把窗口撑坏，也别太窄看不清
-float widgetWidth() { return ImGui::GetWindowWidth() * 0.3f; }
-
-/// 左标签 + 右控件的公共排版
-void beginLabelledRow(std::string const& label) {
-    ImGui::AlignTextToFramePadding();
+/// 行首：记下这一行的边界，再画左侧标签（左对齐）
+void labelRow(std::string const& label) {
+    beginRow();
     ImGui::TextUnformatted(label.c_str());
     ImGui::SameLine();
 }
 
 } // namespace
 
+void setActivePage(MenuPage page) { gActivePage = page; }
+
+MenuPage activePage() { return gActivePage; }
+
+bool isActivePage(MenuPage page) { return gActivePage == page; }
+
+void beginRow() {
+    // 对齐到帧高的排版基线不影响 X，可以放在取值之前
+    ImGui::AlignTextToFramePadding();
+
+    gRowLeft  = ImGui::GetCursorPosX();
+    gRowRight = gRowLeft + ImGui::GetContentRegionAvail().x;
+    ImGui::SetCursorPosX(gRowLeft);
+}
+
+float rowWidth() { return std::max(1.0f, gRowRight - gRowLeft); }
+
+float rowLeft() { return gRowLeft; }
+
+float rowRight() { return gRowRight; }
+
 void addKeyBinder(std::string_view bindingName, std::string const& label) {
-    auto& overlay = GuiOverlay::getInstance();
-    auto  name    = std::string{bindingName};
+    if (!isActivePage(MenuPage::Keys)) return;
 
-    beginLabelledRow(label);
+    auto&      overlay   = GuiOverlay::getInstance();
+    auto       name      = std::string{bindingName};
+    bool const capturing = overlay.isRebinding(bindingName);
 
-    if (overlay.isRebinding(bindingName)) {
-        // 实时预览：按下什么就显示什么（按下 F 还没松就先显示 F）
-        auto const preview = overlay.getRebindPreview();
-        auto const text    = preview.empty() ? "mangrove.gui.capturing"_tr() : formatKeyCombo(preview);
+    auto const text = capturing ? (overlay.getRebindPreview().empty() ? "mangrove.gui.capturing"_tr()
+                                                                      : formatKeyCombo(overlay.getRebindPreview()))
+                                : formatKeyCombo(currentKeys(bindingName));
 
-        auto const widget = text + "##" + name;
+    labelRow(label);
+
+    // 右对齐：按钮右边缘贴着行的右边界（宽度随文字变，但右边缘不动）
+    auto const width = ImGui::CalcTextSize(text.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SetCursorPosX(rowRight() - width);
+
+    auto const widget = text + "##" + name;
+    if (capturing) {
         ImGui::BeginDisabled();
         ImGui::Button(widget.c_str());
         ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s", "mangrove.gui.cancelHint"_tr().c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "mangrove.gui.cancelHint"_tr().c_str());
         return;
     }
 
-    auto const keysText = formatKeyCombo(currentKeys(bindingName));
-    if (ImGui::Button((keysText + "##" + name).c_str())) overlay.beginRebind(name);
+    if (ImGui::Button(widget.c_str())) overlay.beginRebind(name);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "mangrove.gui.rebindHint"_tr().c_str());
 }
 
 bool addToggle(std::string const& label, bool& value) {
-    beginLabelledRow(label);
+    if (!isActivePage(MenuPage::Toggles)) return false;
+
+    labelRow(label);
+
+    // 勾选框是正方形，边长就是帧高
+    ImGui::SetCursorPosX(rowRight() - ImGui::GetFrameHeight());
     return ImGui::Checkbox(("##" + label).c_str(), &value);
 }
 
 bool addSlider(std::string const& label, float& value, float min, float max, char const* format) {
-    beginLabelledRow(label);
-    ImGui::SetNextItemWidth(widgetWidth());
+    if (!isActivePage(MenuPage::Sliders)) return false;
+    labelRow(label);
+
+    auto const width = std::min(kMaxSliderWidth, rowWidth() * kSliderRowRatio);
+    ImGui::SetCursorPosX(rowRight() - width);
+    ImGui::SetNextItemWidth(width);
     return ImGui::SliderFloat(("##" + label).c_str(), &value, min, max, format);
 }
 
-void addText(std::string const& text) { ImGui::TextUnformatted(text.c_str()); }
+void addText(std::string const& text) {
+    beginRow();
+    ImGui::TextUnformatted(text.c_str());
+}
 
-void addHint(std::string const& text) { ImGui::TextDisabled("%s", text.c_str()); }
+void addHint(std::string const& text) {
+    beginRow();
+    ImGui::TextDisabled("%s", text.c_str());
+}
 
 void addSectionHeader(std::string const& text) {
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
+    beginRow();
     ImGui::TextUnformatted(text.c_str());
     ImGui::Spacing();
 }

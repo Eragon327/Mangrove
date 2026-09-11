@@ -1,5 +1,4 @@
 #include "mangrove/core/Feature.h"
-#include "mangrove/gui/GuiWidgets.h"
 #include "mangrove/input/KeyInputManager.h"
 
 #include "ll/api/i18n/I18n.h"
@@ -65,9 +64,7 @@ void FeatureManager::uninstall() {
 
 void FeatureManager::addToMenu() {
     for (auto* feature : mFeatures) {
-        if (!feature) continue;
-        gui::addSectionHeader(feature->label("name", feature->name()));
-        feature->addToMenu();
+        if (feature) feature->addToMenu();
     }
 }
 

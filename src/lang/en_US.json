@@ -3,18 +3,24 @@
         "gui": {
             "title": "Mangrove",
             "close": "Close menu",
+            "page": {
+                "toggles": "Toggles",
+                "sliders": "Configuration",
+                "keys": "Hotkeys"
+            },
             "toggleKey": "Menu hotkey",
             "capturing": "Press a key...",
             "cancelHint": "Esc to cancel",
             "rebindHint": "Click to rebind"
         },
+        "command": {
+            "description": "Open Mangrove menu"
+        },
         "feature": {
             "FreeCamera": {
                 "name": "Free camera",
-                "enabled": "Enabled",
-                "hotkey": "Toggle hotkey",
-                "enabledLog": "Free camera enabled",
-                "disabledLog": "Free camera disabled"
+                "enabled": "Free camera enabled",
+                "disabled": "Free camera disabled"
             }
         }
     }

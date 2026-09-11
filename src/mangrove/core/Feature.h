@@ -37,6 +37,10 @@ public:
     /// 查不到时返回 @p fallback；@p fallback 为空则返回字段名本身。
     [[nodiscard]] std::string label(std::string_view field, std::string_view fallback = {}) const;
 
+    /// 显示名：语言文件里的 `mangrove.feature.<name>.name`，取不到就用类名。
+    /// 菜单控件直接拿它当左侧标签，功能名就不用再单独占一行标题了。
+    [[nodiscard]] std::string displayName() const { return label("name", mName); }
+
     /// 触发：按下热键、或从菜单点开关时调用。**子类在这里写开关逻辑。**
     virtual void toggle() = 0;
 
