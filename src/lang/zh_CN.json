@@ -1,0 +1,21 @@
+{
+    "mangrove": {
+        "gui": {
+            "title": "Mangrove",
+            "close": "关闭菜单",
+            "toggleKey": "菜单开关",
+            "capturing": "按下按键…",
+            "cancelHint": "Esc 取消",
+            "rebindHint": "点击以重新绑定按键"
+        },
+        "feature": {
+            "FreeCamera": {
+                "name": "自由视角",
+                "enabled": "启用",
+                "hotkey": "开关热键",
+                "enabledLog": "自由视角已启用",
+                "disabledLog": "自由视角已禁用"
+            }
+        }
+    }
+}

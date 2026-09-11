@@ -1,43 +1,75 @@
 #include "mangrove/Mangrove.h"
-#include "mangrove/entry/KeyInputManager.h"
-#include "mangrove/entry/Keys.h"
 
+#include "mangrove/command/Command.h"
+#include "mangrove/core/Feature.h"
+#include "mangrove/data/DataBase.h"
+#include "mangrove/gui/GuiOverlay.h"
+#include "mangrove/input/KeyInputManager.h"
+
+#include "ll/api/i18n/I18n.h"
 #include "ll/api/mod/RegisterHelper.h"
+
+#include <memory>
 
 namespace mangrove {
 
-namespace {
+/// mod 级资源。
+struct Mangrove::Impl {
+    data::DataBase mDataBase;
+};
 
-// 测试快捷键：按住 X 再按 C 触发（两个键都是普通键，触发键为最后按下的 C）
-KEY_INPUT(TestKeyInput, VK_X, VK_C) { Mangrove::getInstance().getSelf().getLogger().info("Test key input: X + C"); }
+Mangrove::Mangrove() : impl(std::make_unique<Impl>()), mSelf(*ll::mod::NativeMod::current()) {}
 
-} // namespace
+Mangrove::~Mangrove() = default;
 
 Mangrove& Mangrove::getInstance() {
     static Mangrove instance;
     return instance;
 }
 
-bool Mangrove::load() {
-    // 初始化按键管理器（内部订阅键盘事件）
-    input::KeyInputManager::getInstance().init();
+data::DataBase& Mangrove::getDataBase() { return impl->mDataBase; }
 
-    // 注册测试快捷键
-    TestKeyInput::subscribe();
+bool Mangrove::load() {
+    const auto& logger = getSelf().getLogger();
+
+    // 1) 语言文件：src/lang -> <mod>/lang
+    logger.debug("Loading i18n files...");
+    if (!ll::i18n::getInstance().load(getSelf().getLangDir())) logger.error("Failed to load i18n files");
+
+    // 2) 键值存储：按键绑定等运行期状态的持久化
+    if (!getDataBase().open(getSelf().getDataDir() / "kv")) {
+        logger.warn("Key-value storage is unavailable; nothing will be persisted");
+    }
+
+    // 3) 输入：订阅键盘事件
+    input::KeyInputManager::getInstance().install();
+
+    // 4) 功能：注册热键（会套上 DataBase 里存过的改键）
+    core::FeatureManager::getInstance().install();
 
     return true;
 }
 
-bool Mangrove::enable() { return true; }
+bool Mangrove::enable() {
+    if (!gui::GuiOverlay::getInstance().install()) {
+        getSelf().getLogger().error("Failed to install the ImGui overlay");
+        return false;
+    }
 
-bool Mangrove::disable() { return true; }
+    command::registerMenuCommand();
+    return true;
+}
+
+bool Mangrove::disable() {
+    // 顺序：先让功能收拾自己（摘钩子），再拆 GUI
+    core::FeatureManager::getInstance().uninstall();
+    gui::GuiOverlay::getInstance().uninstall();
+    return true;
+}
 
 bool Mangrove::unload() {
-    TestKeyInput::unsubscribe();
-
-    // 取消订阅并清空按键管理器
-    input::KeyInputManager::getInstance().clear();
-
+    input::KeyInputManager::getInstance().uninstall();
+    getDataBase().close();
     return true;
 }
 

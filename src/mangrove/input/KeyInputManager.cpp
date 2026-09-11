@@ -1,5 +1,6 @@
-#include "mangrove/entry/KeyInputManager.h"
+#include "mangrove/input/KeyInputManager.h"
 #include "mangrove/Mangrove.h"
+#include "mangrove/data/DataBase.h"
 
 #include "ll/api/event/EventBus.h"
 #include "ll/api/service/TargetedBedrock.h"
@@ -33,7 +34,7 @@ KeyInputManager& KeyInputManager::getInstance() {
     return instance;
 }
 
-int KeyInputManager::resolveTrigger(const std::vector<int>& keys) {
+int KeyInputManager::resolveTrigger(std::vector<int> const& keys) {
     // 触发键取最后一个非修饰键；若组合全是修饰键，则取最后一个
     for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
         if (!isModifierKey(*it)) return *it;
@@ -41,16 +42,23 @@ int KeyInputManager::resolveTrigger(const std::vector<int>& keys) {
     return keys.back();
 }
 
-bool KeyInputManager::validKeys(const std::vector<int>& keys) {
+bool KeyInputManager::validKeys(std::vector<int> const& keys) {
     if (keys.empty()) return false;
     return std::ranges::all_of(keys, [](int key) { return key >= 0 && key < static_cast<int>(MaxKeyCode); });
 }
 
-uint64 KeyInputManager::add(std::string name, const std::vector<int>& keys, std::function<void()> callback) {
-    if (!validKeys(keys) || !callback) return 0;
+uint64 KeyInputManager::add(std::string name, std::vector<int> const& keys, std::function<void()> callback) {
+    if (name.empty() || !callback) return 0;
+
+    // 注册时套用持久化的改键结果；没有记录就沿用调用点给的默认值
+    auto effective = keys;
+    if (auto stored = Mangrove::getInstance().getDataBase().getIntList(name); stored && validKeys(*stored)) {
+        effective = std::move(*stored);
+    }
+    if (!validKeys(effective)) return 0;
 
     uint64 id = mNextId++;
-    mBindings.emplace(id, KeyBinding{std::move(name), keys, resolveTrigger(keys), std::move(callback)});
+    mBindings.emplace(id, KeyBinding{std::move(name), effective, resolveTrigger(effective), std::move(callback)});
     return id;
 }
 
@@ -58,7 +66,7 @@ void KeyInputManager::remove(uint64 id) { mBindings.erase(id); }
 
 bool KeyInputManager::contains(uint64 id) const { return mBindings.find(id) != mBindings.end(); }
 
-void KeyInputManager::init() {
+void KeyInputManager::install() {
     if (mKeyEventListener) return;
 
     mKeyEventListener = ll::event::EventBus::getInstance().emplaceListener<ll::event::KeyInputEvent>(
@@ -66,7 +74,7 @@ void KeyInputManager::init() {
     );
 }
 
-void KeyInputManager::clear() {
+void KeyInputManager::uninstall() {
     if (mKeyEventListener) {
         ll::event::EventBus::getInstance().removeListener(mKeyEventListener);
         mKeyEventListener.reset();
@@ -78,13 +86,15 @@ void KeyInputManager::clear() {
     mDispatching = false;
 }
 
-bool KeyInputManager::rebind(std::string_view name, const std::vector<int>& keys) {
+bool KeyInputManager::rebind(std::string_view name, std::vector<int> const& keys) {
     if (!validKeys(keys)) return false;
 
     for (auto& [id, binding] : mBindings) {
         if (binding.name == name) {
             binding.keys    = keys;
             binding.trigger = resolveTrigger(keys);
+            // 改键即存盘
+            Mangrove::getInstance().getDataBase().setIntList(binding.name, keys);
             return true;
         }
     }
@@ -96,6 +106,13 @@ std::optional<std::vector<int>> KeyInputManager::getKeys(std::string_view name) 
         if (binding.name == name) return binding.keys;
     }
     return std::nullopt;
+}
+
+std::vector<std::pair<std::string, std::vector<int>>> KeyInputManager::listBindings() const {
+    std::vector<std::pair<std::string, std::vector<int>>> result;
+    result.reserve(mBindings.size());
+    for (auto const& [id, binding] : mBindings) result.emplace_back(binding.name, binding.keys);
+    return result;
 }
 
 size_t KeyInputManager::heldCount() const { return static_cast<size_t>(std::ranges::count(mHeld, true)); }
