@@ -1,26 +1,40 @@
 {
     "mangrove": {
-        "gui": {
+        "menu": {
             "title": "Mangrove",
-            "close": "Close menu",
-            "page": {
-                "toggles": "Toggles",
-                "sliders": "Configuration",
-                "keys": "Hotkeys"
+            "close": "Close",
+            "tab": {
+                "features": "Features",
+                "hotkeys": "Hotkeys"
             },
-            "toggleKey": "Menu hotkey",
-            "capturing": "Press a key...",
+            "hotkeysHint": "Click a hotkey to rebind it, then press a key combination or a mouse button. Esc cancels.",
+            "capturing": "Press keys...",
             "cancelHint": "Esc to cancel",
-            "rebindHint": "Click to rebind"
+            "rebindHint": "Click to rebind",
+            "rebound": "Hotkey updated",
+            "noFeatures": "No features registered yet.",
+            "binding": {
+                "menuToggle": "Open / close menu"
+            }
+        },
+        "key": {
+            "mouseLeft": "Left Mouse",
+            "mouseRight": "Right Mouse",
+            "mouseMiddle": "Middle Mouse",
+            "mouseX1": "Mouse 4",
+            "mouseX2": "Mouse 5"
         },
         "command": {
-            "description": "Open Mangrove menu"
+            "description": "Open the Mangrove menu"
         },
         "feature": {
             "FreeCamera": {
                 "name": "Free camera",
-                "enabled": "Free camera enabled",
-                "disabled": "Free camera disabled"
+                "enabled": "Enabled",
+                "speed": "Speed",
+                "fov": "Field of view",
+                "on": "Free camera enabled",
+                "off": "Free camera disabled"
             }
         }
     }

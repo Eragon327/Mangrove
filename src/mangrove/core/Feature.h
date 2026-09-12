@@ -1,75 +1,87 @@
 #pragma once
 
-#include "ll/api/base/StdInt.h"
+#include "mangrove/core/Setting.h"
+#include "mangrove/input/KeyBind.h"
 
+#include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace mangrove::core {
 
 class FeatureManager;
 
-/// 功能基类。
+/// 一个功能模块。
 ///
-/// 加一个功能只需要三步：
-///   1. 继承 `Feature`，实现 `toggle()`（开关逻辑）与 `addToMenu()`（菜单控件）；
+/// 新增功能的完整步骤：
+///   1. 继承 `Feature`，构造里用 `add()` 声明设置项，按需要重写行为回调；
 ///   2. 提供 `getInstance()` 单例；
-///   3. 在该功能的 .cpp 里、**命名空间作用域**下写 `ADD_FEATURE(YourFeature, VK_F)`。
+///   3. 在 `Mangrove::load()` 的登记表里加一行。
 ///
-/// 框架负责的部分：热键注册、改键结果的持久化与恢复、把菜单项按登记顺序画进菜单。
+/// 界面渲染与持久化由框架统一处理，功能本身不写任何 UI 代码 ——
+/// 声明一条设置就等于同时得到了控件、存盘和读回。
 class Feature {
 public:
     Feature(Feature const&)            = delete;
     Feature& operator=(Feature const&) = delete;
     virtual ~Feature()                 = default;
 
-    /// 功能名，等于 `ADD_FEATURE` 的类名（如 `FreeCamera`）
-    [[nodiscard]] std::string const& name() const { return mName; }
+    /// 功能标识（等于类名），同时是 i18n 与配置里的命名空间
+    [[nodiscard]] std::string const& id() const { return mId; }
 
-    /// 热键绑定的稳定标识，形如 `feature.FreeCamera`（KeyInputManager / DataBase 用）
-    [[nodiscard]] std::string bindingName() const;
+    /// 显示名：语言文件里的 `mangrove.feature.<id>.name`，取不到时退回 id
+    [[nodiscard]] std::string displayName() const;
 
-    /// 默认组合键（Windows 虚拟键码 VK_*），由 `ADD_FEATURE` 写入
-    [[nodiscard]] std::vector<int> const& defaultKeys() const { return mDefaultKeys; }
-
-    /// 取本功能在语言文件里的字段，例如 `label("hotkey")` 查 `mangrove.feature.<name>.hotkey`。
-    /// 查不到时返回 @p fallback；@p fallback 为空则返回字段名本身。
+    /// 读本功能在语言文件里的字段，例如 `label("speed")` 查
+    /// `mangrove.feature.<id>.speed`；查不到时用 @p fallback，再兜底为字段名本身。
     [[nodiscard]] std::string label(std::string_view field, std::string_view fallback = {}) const;
 
-    /// 显示名：语言文件里的 `mangrove.feature.<name>.name`，取不到就用类名。
-    /// 菜单控件直接拿它当左侧标签，功能名就不用再单独占一行标题了。
-    [[nodiscard]] std::string displayName() const { return label("name", mName); }
+    /// 热键绑定的稳定标识，形如 `feature.FreeCamera`
+    [[nodiscard]] std::string bindingName() const;
 
-    /// 触发：按下热键、或从菜单点开关时调用。**子类在这里写开关逻辑。**
-    virtual void toggle() = 0;
+    /// 本功能的设置项，顺序即界面顺序
+    [[nodiscard]] std::vector<Setting*> const& settings() const { return mSettings; }
 
-    /// 当前是否开启。菜单用它显示开关状态；不想暴露就保持默认实现。
-    [[nodiscard]] virtual bool isEnabled() const { return false; }
+    // -----------------------------------------------------------------------
+    // 行为回调
+    // -----------------------------------------------------------------------
 
-    /// 把自己的控件加进菜单，用 `gui::add*` 系列。
-    /// @note 外层分组标题由框架负责，这里不用再画。
-    virtual void addToMenu() {}
+    /// 默认热键。返回 `std::nullopt` 表示这个功能不占热键。
+    [[nodiscard]] virtual std::optional<input::KeyBind> defaultHotkey() const { return std::nullopt; }
 
-    /// 模组停用 / 卸载时的清理。挂了钩子的功能要在这里摘干净。
-    virtual void shutdown() {}
+    /// 热键按下时调用
+    virtual void onHotkey() {}
+
+    /// 持久化设置已经套用到各个 `Setting` 之后调用一次。
+    /// 需要「把配置真正生效」的功能（例如按开关状态装钩子）在这里做。
+    virtual void onSettingsLoaded() {}
+
+    /// mod 停用 / 卸载时清理（摘钩子、关功能）
+    virtual void onShutdown() {}
 
 protected:
-    /// 功能都是单例，只能由子类的 `getInstance()` 构造
-    Feature() = default;
+    /// @param id 功能标识，建议与类名一致（i18n 与配置都用它做命名空间）
+    explicit Feature(std::string id) : mId(std::move(id)) {}
+
+    /// 声明一个设置项，返回它本身以便链式写法。只在构造函数里调用。
+    template <class T>
+    T& add(T& setting) {
+        mSettings.push_back(&setting);
+        return setting;
+    }
 
 private:
-    friend class FeatureManager;
-
-    std::string      mName;
-    std::vector<int> mDefaultKeys;
+    std::string           mId;
+    std::vector<Setting*> mSettings;
 };
 
 /// 功能注册表。
 ///
-/// `ADD_FEATURE` 宏在静态初始化期只登记指针（不碰任何游戏状态）；
-/// `Mangrove::load()` 里再调 `install()` 统一注册热键 —— 默认键与持久化改键
-/// 因此只有一个入口，不会散落在各个功能里。
+/// 负责两件功能自己不该操心的事：把持久化的设置值套回 `Setting`，以及把默认热键
+/// （连同玩家改过的键）注册进 `input::KeyManager`。
 class FeatureManager {
 public:
     static FeatureManager& getInstance();
@@ -77,42 +89,37 @@ public:
     FeatureManager(FeatureManager const&)            = delete;
     FeatureManager& operator=(FeatureManager const&) = delete;
 
-    /// 登记一个功能（由 ADD_FEATURE 宏调用）。重复登记同一个实例会被忽略。
-    void add(Feature& feature, std::string name, std::vector<int> defaultKeys);
+    /// 登记一个功能。重复登记同一实例会被忽略。
+    void add(Feature& feature);
 
-    /// 注册所有功能的热键（KeyInputManager 装好之后调用）。重复调用安全。
+    /// 套用持久化设置 + 注册热键。重复调用安全。
     void install();
 
-    /// 注销热键并让各功能收拾自己（mod disable 时调用）。重复调用安全。
+    /// 让各功能收拾自己并复位。重复调用安全。
     void uninstall();
 
-    /// 把所有功能的菜单项画进当前 ImGui 窗口。
-    void addToMenu();
-
     [[nodiscard]] std::vector<Feature*> const& features() const { return mFeatures; }
+
+    /// 设置项被改动后调用，负责落盘（真正写文件由 `Config::flush()` 决定时机）。
+    static void notifyChanged(Feature const& feature, Setting const& setting);
+
+    /// 设置反馈出口。由 `Mangrove` 接到界面上，功能只喊一声、不认识界面层。
+    using Notifier = std::function<void(std::string)>;
+    void setNotifier(Notifier notifier);
+
+    /// 给玩家一句反馈（例如「自由视角已启用」）。没有出口时退化成日志。
+    /// @note 功能调这个就够了，不需要 include 任何界面头文件。
+    void notify(std::string message);
+
+    /// 设置项在配置里的完整 key：`<feature>.<setting>`
+    [[nodiscard]] static std::string settingKey(Feature const& feature, Setting const& setting);
 
 private:
     FeatureManager() = default;
 
     std::vector<Feature*> mFeatures;
-    std::vector<uint64>   mBindingIds;
+    Notifier              mNotifier;
     bool                  mInstalled{};
 };
 
 } // namespace mangrove::core
-
-/// 注册一个功能（在功能的 .cpp 里、命名空间作用域下调用）：
-///
-///     ADD_FEATURE(FreeCamera, VK_F)
-///
-/// 第一个参数是类名，同时作为功能名与热键绑定名；
-/// 后面的参数是默认组合键（Windows 虚拟键码 VK_*）。
-#define ADD_FEATURE(Type, ...)                                                                                         \
-    namespace {                                                                                                        \
-    struct Type##FeatureRegistrar {                                                                                    \
-        Type##FeatureRegistrar() {                                                                                     \
-            ::mangrove::core::FeatureManager::getInstance().add(Type::getInstance(), #Type, {__VA_ARGS__});            \
-        }                                                                                                              \
-    };                                                                                                                 \
-    Type##FeatureRegistrar Type##FeatureRegistrarInstance;                                                             \
-    }

@@ -1,18 +1,14 @@
-#include "mangrove/gui/GuiTheme.h"
+#include "mangrove/ui/Theme.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
-namespace mangrove::gui {
+namespace mangrove::ui {
 namespace {
 
-bool       gBaseStyleReady{};
-ImGuiStyle gBaseStyle{};
-float      gLastScale{-1.0f};
-ImVec2     gLastViewport{-1.0f, -1.0f};
-
-/// 菜单密度：字体图集按 2 倍字号构建（见 GuiOverlay 的 loadFonts），
-/// 这里把逻辑字号放大一点，让控件和命中区域更舒服。
+/// 菜单密度：字体图集按 2 倍字号构建，这里把逻辑字号再放大一点，
+/// 让控件和命中区域更舒服。
 constexpr float kDensity = 1.1f;
 
 ImVec4 rgba(float r, float g, float b, float a = 1.0f) { return {r, g, b, a}; }
@@ -30,9 +26,36 @@ UiMetrics calculateMetrics(ImVec2 viewport, float uiScale) {
     return metrics;
 }
 
-void applyTheme(UiMetrics const& metrics) {
+} // namespace mangrove::ui
+
+namespace mangrove::ui::theme {
+namespace {
+
+bool       gBaseStyleReady{};
+ImGuiStyle gBaseStyle{};
+float      gLastScale{-1.0f};
+ImVec2     gLastViewport{-1.0f, -1.0f};
+
+} // namespace
+
+void loadFonts() {
+    auto& io = ImGui::GetIO();
+    io.Fonts->Clear();
+
+    // 中文环境优先用微软雅黑；按 2 倍字号构建，渲染时再缩一半，边缘更干净
+    constexpr char const* kChineseFont = "C:\\Windows\\Fonts\\msyh.ttc";
+    if (std::filesystem::exists(kChineseFont)) {
+        ImFontConfig config{};
+        config.OversampleH = 2;
+        config.OversampleV = 2;
+        if (io.Fonts->AddFontFromFileTTF(kChineseFont, 32.0f, &config, io.Fonts->GetGlyphRangesChineseFull())) return;
+    }
+    io.Fonts->AddFontDefault();
+}
+
+void apply(UiMetrics const& metrics) {
     if (!gBaseStyleReady) {
-        // ImGui 的默认样式里 `FramePadding` 等会被就地缩放，所以基准样式只保存一次
+        // ImGui 的默认样式里 `FramePadding` 之类会被就地缩放，所以基准样式只存一次
         gBaseStyle      = ImGui::GetStyle();
         gBaseStyleReady = true;
     }
@@ -76,9 +99,9 @@ void applyTheme(UiMetrics const& metrics) {
     colors[ImGuiCol_Header]               = rgba(0.16f, 0.16f, 0.16f);
     colors[ImGuiCol_HeaderHovered]        = rgba(0.20f, 0.20f, 0.20f);
     colors[ImGuiCol_HeaderActive]         = rgba(0.16f, 0.16f, 0.16f);
-    colors[ImGuiCol_CheckMark]            = rgba(0.0f, 0.47f, 0.84f);
-    colors[ImGuiCol_SliderGrab]           = rgba(0.0f, 0.47f, 0.84f);
-    colors[ImGuiCol_SliderGrabActive]     = rgba(0.18f, 0.62f, 1.0f);
+    colors[ImGuiCol_CheckMark]            = rgba(0.00f, 0.47f, 0.84f);
+    colors[ImGuiCol_SliderGrab]           = rgba(0.00f, 0.47f, 0.84f);
+    colors[ImGuiCol_SliderGrabActive]     = rgba(0.18f, 0.62f, 1.00f);
     colors[ImGuiCol_ScrollbarBg]          = rgba(0.10f, 0.10f, 0.10f);
     colors[ImGuiCol_ScrollbarGrab]        = rgba(0.30f, 0.30f, 0.31f);
     colors[ImGuiCol_ScrollbarGrabHovered] = rgba(0.38f, 0.38f, 0.39f);
@@ -86,18 +109,18 @@ void applyTheme(UiMetrics const& metrics) {
     colors[ImGuiCol_ModalWindowDimBg]     = rgba(0.0f, 0.0f, 0.0f, 0.62f);
 
     ImGui::GetStyle() = style;
-    // 图集是 2 倍字号，渲染到一半即为"逻辑字号"
+    // 图集是 2 倍字号，渲染到一半即「逻辑字号」
     ImGui::GetIO().FontGlobalScale = metrics.scale * 0.5f * kDensity;
 
     gLastScale    = metrics.scale;
     gLastViewport = metrics.viewport;
 }
 
-void resetTheme() {
+void reset() {
     gBaseStyleReady = false;
     gLastScale      = -1.0f;
     gLastViewport   = {-1.0f, -1.0f};
     if (ImGui::GetCurrentContext()) ImGui::GetIO().FontGlobalScale = 1.0f;
 }
 
-} // namespace mangrove::gui
+} // namespace mangrove::ui::theme

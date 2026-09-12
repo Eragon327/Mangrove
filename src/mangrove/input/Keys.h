@@ -1,8 +1,15 @@
 #pragma once
 
-#include <Windows.h>
+/// Windows 虚拟键码（`VK_*`）补齐。
+///
+/// 这套 SDK 的 `<WinUser.h>` 只定义了功能键，**没有**定义字母键和数字键
+/// （`VK_A`..`VK_Z`、`VK_0`..`VK_9`），所以在这里补上。
+///
+/// 带上守卫，遇到定义完整的 SDK 时不会冲突。
+///
+/// 由 `input/KeyBind.h` 引入，这样功能层写 `VK_F` 不需要自己 include `<Windows.h>`。
 
-#ifndef VK_A
+#ifndef VK_0
 #define VK_0 0x30
 #define VK_1 0x31
 #define VK_2 0x32
@@ -13,6 +20,9 @@
 #define VK_7 0x37
 #define VK_8 0x38
 #define VK_9 0x39
+#endif
+
+#ifndef VK_A
 #define VK_A 0x41
 #define VK_B 0x42
 #define VK_C 0x43

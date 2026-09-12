@@ -1,17 +1,28 @@
 {
     "mangrove": {
-        "gui": {
+        "menu": {
             "title": "Mangrove",
             "close": "关闭菜单",
-            "page": {
-                "toggles": "开关",
-                "sliders": "配置",
-                "keys": "热键"
+            "tab": {
+                "features": "功能",
+                "hotkeys": "快捷键"
             },
-            "toggleKey": "菜单开关",
+            "hotkeysHint": "点一下快捷键即可重新绑定，然后按下组合键或鼠标键；捕获时按 Esc 取消。",
             "capturing": "按下按键…",
             "cancelHint": "Esc 取消",
-            "rebindHint": "点击以重新绑定按键"
+            "rebindHint": "点击以重新绑定",
+            "rebound": "快捷键已更新",
+            "noFeatures": "还没有登记任何功能。",
+            "binding": {
+                "menuToggle": "打开 / 关闭菜单"
+            }
+        },
+        "key": {
+            "mouseLeft": "鼠标左键",
+            "mouseRight": "鼠标右键",
+            "mouseMiddle": "鼠标中键",
+            "mouseX1": "鼠标侧键 1",
+            "mouseX2": "鼠标侧键 2"
         },
         "command": {
             "description": "打开 Mangrove 菜单"
@@ -19,8 +30,11 @@
         "feature": {
             "FreeCamera": {
                 "name": "自由视角",
-                "enabled": "自由视角已启用",
-                "disabled": "自由视角已禁用"
+                "enabled": "启用",
+                "speed": "速度",
+                "fov": "视野角度",
+                "on": "自由视角已启用",
+                "off": "自由视角已禁用"
             }
         }
     }

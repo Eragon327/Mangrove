@@ -4,12 +4,9 @@
 
 #include <memory>
 
-namespace mangrove::data {
-class DataBase;
-}
-
 namespace mangrove {
 
+/// mod 入口。只做装配，不放业务逻辑。
 class Mangrove {
     struct Impl;
 
@@ -24,10 +21,6 @@ public:
 
     [[nodiscard]] ll::mod::NativeMod& getSelf() const { return mSelf; }
 
-    /// mod 级资源（跟着 mod 生命周期走的东西）。
-    /// 功能 manager 不在这里，它们仍是各自独立的单例（hook / 窗口过程都是静态上下文）。
-    [[nodiscard]] data::DataBase& getDataBase();
-
     /// @return True if the mod is loaded successfully.
     bool load();
 
@@ -41,7 +34,7 @@ public:
     bool unload();
 
 private:
-    std::unique_ptr<Impl> impl;
+    std::unique_ptr<Impl> mImpl;
     ll::mod::NativeMod&   mSelf;
 };
 

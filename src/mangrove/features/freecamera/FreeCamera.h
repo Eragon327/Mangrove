@@ -4,33 +4,36 @@
 
 namespace mangrove::features {
 
-/// 自由视角 —— **目前只是空壳占位**。
+/// 自由视角。
 ///
-/// 相机钩子（`LevelRendererPlayer::setupCamera` 改写位姿 + 视图矩阵栈顶）已全部移除，
-/// 只留下开关状态和一条日志。留着它是为了验证功能框架本身跑得通：
-/// `ADD_FEATURE` 注册、热键（默认 F）、菜单开关、改键持久化。
+/// 它同时是**新增功能的参考模板**：一个功能 = `features/<名字>/` 一个目录，
+/// 里面一个 `Feature` 子类（构造里声明设置项、重写需要的行为回调），
+/// 再去 `Mangrove::addFeatures()` 登记一行。界面、持久化、热键都不用自己写。
 ///
-/// 真正的实现见 git 历史；需要恢复时按 `core/Feature.h` 的说明实现 `toggle()` 即可。
+/// @warning 相机改写本身还没接上 —— 那是功能自己的实现细节，不属于这套框架。
+///          它现在的作用是把「新增一个功能」这条路完整跑通并被验证：
+///          开关 + 热键 + 滑条 + 数字输入 + 全部持久化 + 热键反馈。
+///          真正的实现加在 `apply()` 里（钩住 `LevelRendererPlayer::setupCamera`）。
 class FreeCamera : public core::Feature {
 public:
     static FreeCamera& getInstance();
 
-    /// 热键按下 / 菜单里点开关时的入口
-    void toggle() override;
+    [[nodiscard]] std::optional<input::KeyBind> defaultHotkey() const override;
 
-    [[nodiscard]] bool isEnabled() const override;
-
-    void addToMenu() override;
-
-    /// mod 停用 / 卸载时把开关复位
-    void shutdown() override;
+    void onHotkey() override;
+    void onSettingsLoaded() override;
+    void onShutdown() override;
 
 private:
-    FreeCamera() = default;
+    FreeCamera();
 
-    void setEnabled(bool enabled);
+    /// 统一入口：热键和菜单里的开关都走这里
+    void apply(bool enabled);
 
-    bool mEnabled{false};
+    // 声明即得控件 + 持久化。声明顺序就是菜单里的顺序。
+    core::ToggleSetting mEnabled{"enabled", false};
+    core::SliderSetting mSpeed{"speed", 0.25, 4.0, 0.05, 1.0};
+    core::NumberSetting mFov{"fov", 30.0, 110.0, 70.0};
 };
 
 } // namespace mangrove::features
