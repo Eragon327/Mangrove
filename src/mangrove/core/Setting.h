@@ -15,9 +15,8 @@ class Setting {
 public:
     /// 控件类型
     enum class Kind {
-        Toggle, ///< 开关
-        Slider, ///< 滑条：区间内按步长吸附
-        Number, ///< 数字输入框：区间内任意数值
+        Toggle, ///< 开关：值域 {0, 1}
+        Number, ///< 数值：区间 + 步长，界面默认是滑条，可以切成输入框直接打字
     };
 
     Setting(Setting const&)            = delete;
@@ -30,7 +29,7 @@ public:
     [[nodiscard]] double             step() const { return mStep; }
     [[nodiscard]] double             defaultValue() const { return mDefaultValue; }
 
-    /// 当前值。开关用 0 / 1 表示，滑条与数字输入就是数值本身。
+    /// 当前值。开关用 0 / 1 表示，数值就是数值本身。
     [[nodiscard]] double value() const { return mValue; }
 
     /// 当前值（开关语义）
@@ -53,12 +52,12 @@ protected:
       mValue(mDefaultValue) {}
 
 private:
-    /// 值域收敛：非有限值取 @p fallback，滑条按步长吸附，最后夹进区间。
+    /// 值域收敛：非有限值取 @p fallback，数值按步长吸附，最后夹进区间。
     /// @note 参数式而非读成员，构造期间也能安全使用。
     [[nodiscard]] static double
     sanitize(Kind kind, double min, double max, double step, double value, double fallback) {
         if (!std::isfinite(value)) return fallback;
-        if (kind == Kind::Slider && step > 0.0) value = std::round(value / step) * step;
+        if (kind == Kind::Number && step > 0.0) value = std::round(value / step) * step;
         return std::clamp(value, min, max);
     }
 
@@ -83,18 +82,14 @@ public:
     : Setting(Kind::Toggle, std::move(id), 0.0, 1.0, 1.0, defaultValue ? 1.0 : 0.0) {}
 };
 
-/// 滑条：区间 + 步长
-class SliderSetting : public Setting {
-public:
-    SliderSetting(std::string id, double min, double max, double step, double defaultValue)
-    : Setting(Kind::Slider, std::move(id), min, max, step, defaultValue) {}
-};
-
-/// 数字输入框：区间内任意数值
+/// 数值：区间 + 步长（步长为 0 表示不吸附，可取区间内任意值）。
+///
+/// 界面默认画成滑条，右侧按钮可以切成输入框直接打字 —— 两者是同一个控件的两种编辑方式，
+/// 所以这里是**一个**类型而不是两个。
 class NumberSetting : public Setting {
 public:
-    NumberSetting(std::string id, double min, double max, double defaultValue)
-    : Setting(Kind::Number, std::move(id), min, max, 0.0, defaultValue) {}
+    NumberSetting(std::string id, double min, double max, double step, double defaultValue)
+    : Setting(Kind::Number, std::move(id), min, max, step, defaultValue) {}
 };
 
 } // namespace mangrove::core

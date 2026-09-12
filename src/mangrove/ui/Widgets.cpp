@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <optional>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace mangrove::ui::widgets {
@@ -25,8 +27,18 @@ constexpr float kMaxControlWidth = 260.0f;
 float gRowLeft{};
 float gRowRight{};
 
-/// 滑条的显示格式：按步长决定小数位，免得 0.3 被显示成 0
-[[nodiscard]] char const* sliderFormat(double step) {
+/// 每个数值控件的临时编辑方式。
+///
+/// 这是**视图状态**，不是设置 —— 所以既不进模型也不进配置，
+/// 菜单关掉就清空（见 `resetTransientState`），下次打开又是默认的滑条。
+struct FieldState {
+    bool textMode{};     ///< true = 显示输入框，false = 显示滑条
+    bool focusPending{}; ///< 刚从滑条切过来时，下一帧自动聚焦输入框
+};
+std::unordered_map<std::string, FieldState> gFieldStates;
+
+/// 数值的显示格式：按步长决定小数位，免得 0.3 被显示成 0
+[[nodiscard]] char const* valueFormat(double step) {
     if (step >= 1.0) return "%.0f";
     if (step >= 0.1) return "%.1f";
     return "%.2f";
@@ -85,10 +97,13 @@ void beginRow() {
 
 float rowRight() { return gRowRight; }
 
+void resetTransientState() { gFieldStates.clear(); }
+
 void settingRow(core::Feature& feature, core::Setting& setting) {
     auto const label = feature.label(setting.id());
     // 控件 ID 用「功能.设置项」，避免不同功能里同名的设置互相串 ID
-    auto const widgetId = "##" + feature.id() + "." + setting.id();
+    auto const key      = feature.id() + "." + setting.id();
+    auto const widgetId = "##" + key;
 
     labelRow(label);
 
@@ -102,43 +117,75 @@ void settingRow(core::Feature& feature, core::Setting& setting) {
         if (changed) setting.setValue(value ? 1.0 : 0.0);
         break;
     }
-    case core::Setting::Kind::Slider: {
+    case core::Setting::Kind::Number: {
+        // 滑条和输入框是同一个控件的两种编辑方式：右边一个小按钮来回切。
+        auto&       state       = gFieldStates[key];
+        auto const& style       = ImGui::GetStyle();
+        auto const  totalWidth  = controlWidth();
+        auto const  buttonText  = "mangrove.widget.numberInput"_tr();
+        auto const  buttonWidth = ImGui::CalcTextSize(buttonText.c_str()).x + style.FramePadding.x * 2.0f;
+        auto const  fieldWidth  = std::max(40.0f, totalWidth - buttonWidth - style.ItemInnerSpacing.x);
+
+        alignControlRight(totalWidth);
+        ImGui::SetNextItemWidth(fieldWidth);
+
         double       value    = setting.value();
         double const minValue = setting.min();
         double const maxValue = setting.max();
 
-        auto const width = controlWidth();
-        alignControlRight(width);
-        ImGui::SetNextItemWidth(width);
-        changed = ImGui::SliderScalar(
-            widgetId.c_str(),
-            ImGuiDataType_Double,
-            &value,
-            &minValue,
-            &maxValue,
-            sliderFormat(setting.step())
-        );
-        // 拖动过程中就写回，功能能立刻看到新值；落盘由 Config 决定时机
+        if (state.textMode) {
+            if (state.focusPending) {
+                // 切过来的这一帧直接聚焦，玩家点完就能打字
+                ImGui::SetKeyboardFocusHere();
+                state.focusPending = false;
+            }
+            // CharsDecimal 只收数字字符；AutoSelectAll 聚焦即全选，直接覆盖原值
+            changed = ImGui::InputDouble(
+                widgetId.c_str(),
+                &value,
+                0.0,
+                0.0,
+                valueFormat(setting.step()),
+                ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_AutoSelectAll
+            );
+        } else {
+            changed = ImGui::SliderScalar(
+                widgetId.c_str(),
+                ImGuiDataType_Double,
+                &value,
+                &minValue,
+                &maxValue,
+                valueFormat(setting.step())
+            );
+        }
+        // 拖动 / 输入过程中就写回，功能能立刻看到新值；落盘由 Config 决定时机
         if (changed) setting.setValue(value);
-        break;
-    }
-    case core::Setting::Kind::Number: {
-        double value = setting.value();
 
-        auto const width = controlWidth();
-        alignControlRight(width);
-        ImGui::SetNextItemWidth(width);
-        // 带 step / step_fast 会有 +- 小按钮方便微调；聚焦时全选，直接打字即可覆盖
-        changed = ImGui::InputDouble(
-            widgetId.c_str(),
-            &value,
-            1.0,
-            10.0,
-            "%.2f",
-            ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_AutoSelectAll
-        );
-        // setValue 会夹进 [min, max]，非法输入被静默纠正
-        if (changed) setting.setValue(value);
+        ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+
+        // 输入态把按钮点亮，这样「现在是哪种编辑方式」一眼能看出来。
+        //
+        // @note 颜色先算好，push / pop **无条件成对**、紧贴着按钮写。
+        //       不能写成「if (textMode) push ... if (textMode) pop」——
+        //       按钮一点下去 textMode 就翻转了，两边条件不一致，push/pop 必然配平失败，
+        //       ImGui 会报错并在窗口上画一圈红框。
+        auto const&  colors = style.Colors;
+        bool const   lit    = state.textMode;
+        ImVec4 const button = lit ? colors[ImGuiCol_SliderGrab] : colors[ImGuiCol_Button];
+        ImVec4 const hover  = lit ? colors[ImGuiCol_SliderGrabActive] : colors[ImGuiCol_ButtonHovered];
+        ImVec4 const active = lit ? colors[ImGuiCol_SliderGrabActive] : colors[ImGuiCol_ButtonActive];
+
+        ImGui::PushStyleColor(ImGuiCol_Button, button);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, active);
+        bool const toggled = ImGui::Button((buttonText + "##" + key).c_str());
+        ImGui::PopStyleColor(3);
+
+        if (toggled) {
+            state.textMode     = !state.textMode;
+            state.focusPending = state.textMode;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "mangrove.widget.numberInputHint"_tr().c_str());
         break;
     }
     }

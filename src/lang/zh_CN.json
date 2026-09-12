@@ -24,6 +24,10 @@
             "mouseX1": "鼠标侧键 1",
             "mouseX2": "鼠标侧键 2"
         },
+        "widget": {
+            "numberInput": "123",
+            "numberInputHint": "切换滑条 / 数字输入"
+        },
         "command": {
             "description": "打开 Mangrove 菜单"
         },

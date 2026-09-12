@@ -24,6 +24,10 @@
             "mouseX1": "Mouse 4",
             "mouseX2": "Mouse 5"
         },
+        "widget": {
+            "numberInput": "123",
+            "numberInputHint": "Switch between slider and number input"
+        },
         "command": {
             "description": "Open the Mangrove menu"
         },

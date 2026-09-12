@@ -6,6 +6,7 @@
 #include "mangrove/ui/InputGuard.h"
 #include "mangrove/ui/Menu.h"
 #include "mangrove/ui/Theme.h"
+#include "mangrove/ui/Widgets.h"
 
 #include <Windows.h>
 
@@ -106,6 +107,12 @@ bool             gGraphicsReady{};
 bool             gVisibleLastFrame{};
 std::mutex       gResourceMutex;
 
+/// ImGui 是否正在收键盘（有文本框在编辑）。
+///
+/// 由渲染线程每帧刷新、菜单关掉时清掉；窗口线程只读这个快照。
+/// 窗口线程**不能**自己去问 ImGui —— 见下面的线程模型说明。
+std::atomic_bool gTextInputActive{false};
+
 /// 我们自己吞掉的按下键（含鼠标键），需要连带吞掉对应的抬起
 std::array<bool, input::kMaxVirtualKey> gHeldKeys{};
 std::array<bool, input::kMaxVirtualKey> gConsumedKeyReleases{};
@@ -137,6 +144,21 @@ ULONGLONG   gToastExpireAt{};
 bool gCharSynthesized{};
 
 auto& logger() { return Mangrove::getInstance().getSelf().getLogger(); }
+
+// ---------------------------------------------------------------------------
+// 线程模型（改这个文件之前先看这段）
+//
+// 窗口过程跑在游戏主线程（下称「窗口线程」），渲染跑在 Present 所在线程（下称「渲染线程」）。
+// ImGui 上下文是**单线程**的，这里有两处例外：
+//   1. 窗口线程：`ImGui_ImplWin32_WndProcHandler` + 合成字符，只喂输入、不下帧；
+//   2. 渲染线程：`NewFrame` / `Render` 整帧，并把只读状态发成快照给窗口线程。
+// 两者理论上会撞在同一批输入队列上（已知风险，彻底解法是把窗口消息排队交给渲染线程消费），
+// 所以窗口线程**不要**顺手读 ImGui 的其它状态：要什么就让渲染线程发快照（见 gTextInputActive）。
+//
+// 另外：游戏进程里**不要**用 std::printf 写诊断（详见仓库记忆里的踩坑记录）。
+// 控制台处于「选择文本」（QuickEdit）状态时，主线程的写会直接阻塞，
+// 表现就是按一下键客户端卡死。要诊断请用 OutputDebugStringW（非阻塞）。
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // 窗口 / 输入
@@ -504,7 +526,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
     if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && wParam == FALSE)) {
         gHeldKeys.fill(false);
         gConsumedKeyReleases.fill(false);
-        gCharSynthesized = false;
+        gCharSynthesized      = false;
+        gConsumeEscapeRelease = false; // 这把 Esc 的抬起可能永远不会来了，别留着一个「等着吞抬起」
         ClipCursor(nullptr);
         Overlay::getInstance().cancelCapture();
     }
@@ -514,8 +537,11 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 
     auto const imguiReady = gImGuiReady.load(std::memory_order_acquire);
     // 文本框聚焦时键盘整个归 ImGui：不判定菜单开关热键（正在打的字里出现 X 不算开关），
-    // 也不给游戏
-    bool const editingText = imguiReady && ImGui::GetIO().WantTextInput;
+    // 也不给游戏。
+    //
+    // @note 这里读渲染线程发来的快照，而不是直接问 ImGui —— 窗口线程读 ImGui
+    //       会和正在下帧的渲染线程撞同一份上下文（见文件头的线程模型）。
+    bool const editingText = imguiReady && gTextInputActive.load(std::memory_order_relaxed);
 
     // 1) 菜单开关热键。菜单打开时游戏输入被 InputGuard 拦掉，
     //    KeyInputEvent / MouseInputEvent 都不会发布，所以只能在这一层判定。
@@ -565,19 +591,27 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         // 文本框就只剩加减按钮能用了。这里自己把按键翻成字符补进去。
         if (message == WM_KEYDOWN) {
             gCharSynthesized = false;
-            if (ImGui::GetIO().WantTextInput) submitKeyAsCharacter(wParam, lParam);
+            if (editingText) submitKeyAsCharacter(wParam, lParam);
         }
 
-        if (message == WM_KEYDOWN && wParam == VK_ESCAPE) {
+        // Esc 分两层：正在文本框里打字时先由 ImGui 撤销编辑（不关菜单），
+        // 没在打字时才是「关菜单」。不然在输入框里按 Esc 会连菜单一起关掉。
+        //
+        // 关菜单只改状态：光标那类窗口级动作由 `setVisible` 里 PostMessage 的
+        // `kMsgRestoreGameMouse` 去办（那条消息在本次派发**返回之后**才处理）。
+        // 不要在这里直接动光标 —— 那是在输入消息的派发过程中重入输入系统。
+        if (message == WM_KEYDOWN && wParam == VK_ESCAPE && !editingText) {
             gConsumeEscapeRelease = true;
             Overlay::getInstance().setVisible(false);
-            confineCursorToClientCenter(window);
             return 1;
         }
         if (isMenuInputMessage(message)) return consumeMenuInputMessage(window, message, wParam, lParam);
     } else if (gConsumeEscapeRelease && (message == WM_KEYUP || message == WM_SYSKEYUP) && wParam == VK_ESCAPE) {
-        // 关菜单用的那一发 Esc，抬起事件也得一起吞掉
+        // 关菜单用的那一发 Esc：抬起同样不给游戏，但要让 ImGui 知道键松了 ——
+        // 菜单已经关了、不再下帧，少了这条抬起 ImGui 会一直以为 Esc 按着，
+        // 下次打开菜单时就是一份错的状态。
         gConsumeEscapeRelease = false;
+        if (imguiReady) ImGui_ImplWin32_WndProcHandler(window, message, wParam, lParam);
         return 1;
     }
 
@@ -692,12 +726,31 @@ bool initializeGraphics(IDXGISwapChain* swapChain) {
     return true;
 }
 
-void releaseImGuiMouseState() {
+/// 菜单关掉的那一帧把 ImGui 的输入状态清干净，否则下次打开还带着上次的残留。
+void releaseImGuiInputState() {
     auto& io = ImGui::GetIO();
     for (bool& down : io.MouseDown) down = false;
     io.MouseWheel  = 0.0f;
     io.MouseWheelH = 0.0f;
     io.MousePos    = ImVec2(-FLT_MAX, -FLT_MAX);
+
+    // 键也要一起放掉（等价于「把所有键都松开」）。
+    //
+    // 这条是给「反复开关菜单之后输入框打不进字」收尾的：关菜单用的那发 Esc 只有按下
+    // 喂给了 ImGui（见 windowProc 里的说明），抬起是被我们吞掉的。ImGui 那边于是认为
+    // Esc **一直按着**，而 `InputTextEx` 用
+    //   Shortcut(ImGuiKey_Escape, ImGuiInputFlags_Repeat, id)
+    // 判断「取消编辑」—— 一个一直按着的键会按键盘重复率（默认 250ms 后每 50ms 一次）
+    // 持续命中，于是 `is_cancel` 反复成立 → `clear_active_id = true` → 输入框刚激活
+    // 下一帧就被 `ClearActiveID()`，`io.WantTextInput` 退回 0，窗口线程也就不再合成字符：
+    // 表现就是「能点、打不进字」，而且这个状态会一直带进后面每一次打开菜单。
+    //
+    // 菜单关着的时候不再下帧，没人会替我们收拾，所以在这里显式清掉。
+    io.ClearInputKeys();
+
+    // 菜单关着的时候不再下帧，这个快照会永远停在最后一帧的值上。
+    // 必须显式清掉：留着 true 的话窗口线程会一直以为还在打字，开关热键被永久跳过。
+    gTextInputActive.store(false, std::memory_order_relaxed);
 }
 
 /// 当前是否有未过期的提示
@@ -738,6 +791,9 @@ void drawFrame(ID3D11RenderTargetView* target) {
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+
+    // 下完帧才有本帧的 WantTextInput，把它发成快照给窗口线程（它不能自己来问）
+    gTextInputActive.store(ImGui::GetIO().WantTextInput, std::memory_order_relaxed);
 
     if (Overlay::getInstance().isVisible()) menu::render();
     drawToasts();
@@ -812,8 +868,8 @@ void render(IDXGISwapChain* swapChain) {
 
     auto const visible = Overlay::getInstance().isVisible();
 
-    // 刚关掉菜单：清掉 ImGui 累积的鼠标状态，否则下次打开会以为按键还按着
-    if (gVisibleLastFrame && !visible) releaseImGuiMouseState();
+    // 刚关掉菜单：清掉 ImGui 累积的输入状态，否则下次打开会以为按键还按着
+    if (gVisibleLastFrame && !visible) releaseImGuiInputState();
     gVisibleLastFrame = visible;
 
     // 菜单关着又没有提示要画时，完全不进入 ImGui 帧
@@ -1158,8 +1214,14 @@ void Overlay::setVisible(bool visible) {
     // 关掉后 `KeyManager` 会清掉按住状态，所以「菜单开着时按住的键」不会在关掉后补触发。
     input::KeyManager::getInstance().setSuppressed(visible);
 
-    // 关菜单时如果还在改键，直接放弃这次捕获
-    if (!visible) cancelCapture();
+    // 关菜单时如果还在改键，直接放弃这次捕获；
+    // 反过来，每次打开都从默认的视图状态开始（数值控件回到滑条）。
+    // 放在「打开」而不是「关闭」侧：不管显隐是被热键、关闭按钮还是指令触发的，都成立。
+    if (visible) {
+        widgets::resetTransientState();
+    } else {
+        cancelCapture();
+    }
 
     // 打开 / 关闭后的短暂窗口内继续独占输入，避免触发键本身漏进游戏
     setOverlayInputCapture(visible);

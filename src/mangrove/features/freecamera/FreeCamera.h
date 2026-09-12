@@ -32,8 +32,8 @@ private:
 
     // 声明即得控件 + 持久化。声明顺序就是菜单里的顺序。
     core::ToggleSetting mEnabled{"enabled", false};
-    core::SliderSetting mSpeed{"speed", 0.25, 4.0, 0.05, 1.0};
-    core::NumberSetting mFov{"fov", 30.0, 110.0, 70.0};
+    core::NumberSetting mSpeed{"speed", 0.25, 4.0, 0.05, 1.0};
+    core::NumberSetting mFov{"fov", 30.0, 110.0, 1.0, 70.0};
 };
 
 } // namespace mangrove::features

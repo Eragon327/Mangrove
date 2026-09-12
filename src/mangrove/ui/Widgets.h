@@ -24,4 +24,8 @@ void settingRow(core::Feature& feature, core::Setting& setting);
 /// 一行快捷键：左侧标签，右侧显示当前键位，点一下进入捕获（Esc 取消）。
 void keyRow(std::string_view bindingName, std::string const& label);
 
+/// 清掉控件层的临时视图状态（数值控件当前是滑条还是输入框）。
+/// 这是视图状态、不是设置，所以菜单关闭时由 `ui::Overlay` 调它复位。
+void resetTransientState();
+
 } // namespace mangrove::ui::widgets
