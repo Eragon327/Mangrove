@@ -3,6 +3,7 @@
 #include "mangrove/core/Feature.h"
 #include "mangrove/input/KeyManager.h"
 #include "mangrove/ui/Overlay.h"
+#include "mangrove/ui/Theme.h"
 
 #include "ll/api/i18n/I18n.h"
 
@@ -20,9 +21,10 @@ namespace {
 using ll::i18n_literals::operator""_tr;
 
 /// 控件最多占行宽的这个比例，剩下的留给标签
-constexpr float kControlRowRatio = 0.45f;
-/// 控件自身的宽度上限（行再宽也不把它拉长）
-constexpr float kMaxControlWidth = 260.0f;
+constexpr float kControlRowRatio = 0.5f;
+/// 控件自身的宽度上限（逻辑单位，会乘界面缩放）：行再宽也不把它拉长。
+/// 滑条就在这个宽度里被两个小按钮再挤一下 —— **嫌滑条短、拖动太灵敏就调这两个数**。
+constexpr float kMaxControlWidth = 320.0f;
 
 float gRowLeft{};
 float gRowRight{};
@@ -44,7 +46,12 @@ std::unordered_map<std::string, FieldState> gFieldStates;
     return "%.2f";
 }
 
-[[nodiscard]] float controlWidth() { return std::min(kMaxControlWidth, (gRowRight - gRowLeft) * kControlRowRatio); }
+/// 控件的宽度：行宽的一个比例，且有上限。两者都是**逻辑单位**，上限要乘界面缩放 ——
+/// 否则 4K 全屏下控件不会跟着字体变大，滑条会显得又短又灵敏。
+[[nodiscard]] float controlWidth() {
+    float const maxWidth = kMaxControlWidth * theme::scale();
+    return std::min(maxWidth, (gRowRight - gRowLeft) * kControlRowRatio);
+}
 
 /// 画左对齐的标签，并让光标停在标签后面
 void labelRow(std::string const& label) {

@@ -39,6 +39,13 @@ constexpr float kLookDegreesPerSensitivity    = 0.25f;
 /// 世界上方：空格 / 左Shift 是「上下平移」，不跟着俯仰走
 Vec3 const kWorldUp{0.0f, 1.0f, 0.0f};
 
+/// `Options::setPlayerViewPerspective` 的取值（同 `SharedTypes::v1_21_100::PlayerViewMode`）：
+/// 0 = 第一人称，1 = 第三人称，2 = 第三人称（正面）。
+///
+/// 自由相机的相机姿态是我们自己写进去的，视角选项只影响「画不画自己的身体」：
+/// 第一人称不画，第三人称画 —— 所以想要看见自己就用第三人称。
+constexpr int kThirdPersonPerspective = 1;
+
 auto& logger() { return Mangrove::getInstance().getSelf().getLogger(); }
 
 float wrapDegrees(float degrees) {
@@ -328,33 +335,26 @@ void FreeCamera::takeOverRenderOptions() {
     auto& options = client->getOptions();
 
     // 玩家的原值**只记一次**，之后一直沿用：万一某次没还干净（拿不到客户端 / 进程被强杀），
-    // 也不会把"我们自己设的 true"当成玩家的原意记下来 —— 那正是"手再也回不来"的成因
-    // （记成 true 之后，之后每一次"还原"都是把它设回 true）。
+    // 也不会把"我们自己设的值"当成玩家的原意记下来 —— 那正是"视角再也回不来"的成因。
     if (!mSavedViewPerspective) mSavedViewPerspective = options.getPlayerViewPerspective();
-    if (!mSavedHideItemInHand) mSavedHideItemInHand = options.getHideItemInHand();
 
-    // 第一人称：不渲染自己的身体；藏手：否则那只手会跟着相机一起飞。
+    // **第三人称**：让玩家能看见自己的身体。这是引擎自己渲染的本地玩家真人模型，
+    // 所以动作、手持物、身上穿的盔甲都是真的（不像另建一个假实体，只能站着不动）。
+    //
+    // 那只「跟着相机飞的手」是第一人称的视图模型，第三人称根本不画，所以不用再藏它。
     //
     // 这里**无条件写**，不要加"get() 和目标值不同才写"那种化化 —— 那等于假设这个选项的
     // 读和写是一对完好的接口。实测下来不是：写进去之后 `get()` 可能仍然返回旧值，
-    // 于是"还原"那一步会被那个判断直接跳过，手就再也回不来了。写一遍的开销是 0.0ms（量过）。
-    options.setPlayerViewPerspective(0);
-    options.setHideItemInHand(true);
+    // 于是"还原"那一步会被那个判断直接跳过，视角就再也回不来了。写一遍的开销是 0.0ms（量过）。
+    options.setPlayerViewPerspective(kThirdPersonPerspective);
 }
 
 void FreeCamera::restoreRenderOptions() {
     auto client = ll::service::getClientInstance();
     if (!client) return; // 拿不到客户端：**保留记录**，留给下次（下次开关 / 卸载）再还
 
-    auto& options = client->getOptions();
-    if (mSavedViewPerspective) options.setPlayerViewPerspective(*mSavedViewPerspective);
-    if (mSavedHideItemInHand) options.setHideItemInHand(*mSavedHideItemInHand);
-
-    // 还完读回来确认一次。读回来不一致就说明这个选项不是"设了就算"，
-    // 那"临时藏手"这个做法本身就不成立（只有真出问题才会有这条）。
-    if (mSavedHideItemInHand && options.getHideItemInHand() != *mSavedHideItemInHand) {
-        logger().warn("Hide-item-in-hand did not take the restored value {}", *mSavedHideItemInHand);
-    }
+    // 同样无条件写，理由同上
+    if (mSavedViewPerspective) client->getOptions().setPlayerViewPerspective(*mSavedViewPerspective);
 }
 
 } // namespace mangrove::features

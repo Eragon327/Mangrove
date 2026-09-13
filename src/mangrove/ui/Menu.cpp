@@ -16,12 +16,15 @@ namespace {
 
 using ll::i18n_literals::operator""_tr;
 
-/// 单列的最大宽度：屏幕再宽，内容也不会被拉成一条长线
+/// 单列的最大宽度（逻辑单位）：屏幕再宽，内容也不会被拉成一条长线。
+///
+/// **调这里可以改菜单整体的宽度**。实际宽度 = 本值 × `theme::scale()`，
+/// 乘缩放是必需的：不乘的话 4K 全屏下这一列会变成屏幕中间一条细缝。
 constexpr float kMaxColumnWidth = 720.0f;
 
 [[nodiscard]] float usableWidth() { return ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x * 2.0f; }
 
-[[nodiscard]] float columnWidth() { return std::max(1.0f, std::min(usableWidth(), kMaxColumnWidth)); }
+[[nodiscard]] float columnWidth() { return std::max(1.0f, std::min(usableWidth(), kMaxColumnWidth * theme::scale())); }
 
 /// 单列居中；屏幕不够宽时贴着左边
 [[nodiscard]] float columnLeft() {

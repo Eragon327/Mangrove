@@ -122,6 +122,8 @@ void apply(ImVec2 viewport) {
     apply(calculateMetrics(viewport, std::max(1.0f, viewport.y / 900.0f)));
 }
 
+float scale() { return gLastScale > 0.0f ? gLastScale : 1.0f; }
+
 void reset() {
     gBaseStyleReady = false;
     gLastScale      = -1.0f;
