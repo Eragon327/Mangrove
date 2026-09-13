@@ -44,7 +44,7 @@ public:
     /// 取消订阅并清空所有绑定。重复调用安全。
     void uninstall();
 
-    /// 注册热键。若配置里有改键记录，@p defaultKeys 会被玩家的设置覆盖。
+    /// 注册热键。若设置库里有改键记录，@p defaultKeys 会被玩家的设置覆盖。
     /// @param name 稳定标识，形如 `feature.FreeCamera`
     void add(std::string name, KeyBind defaultKeys, Handler handler);
 
@@ -87,7 +87,7 @@ private:
     struct Binding {
         std::string name;
         KeyBind     keys;
-        /// 代码里的默认键。改回它时就不该再往配置里写记录了（只存 diff）。
+        /// 代码里的默认键。改回它时就不该再往设置库里写记录了（只存 diff）。
         KeyBind defaultKeys;
         Handler handler;
     };

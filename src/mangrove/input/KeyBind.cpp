@@ -7,7 +7,6 @@
 #include <Windows.h>
 
 #include <algorithm>
-#include <charconv>
 
 namespace mangrove::input {
 
@@ -154,35 +153,6 @@ std::string KeyBind::display() const {
         result += keyName(mKeys[index]);
     }
     return result;
-}
-
-std::string KeyBind::toString() const {
-    std::string result;
-    for (size_t index = 0; index < mKeys.size(); ++index) {
-        if (index != 0) result.push_back('+');
-        result += std::to_string(mKeys[index]);
-    }
-    return result;
-}
-
-std::optional<KeyBind> KeyBind::fromString(std::string_view text) {
-    std::vector<int> keys;
-    size_t           start = 0;
-    while (start <= text.size()) {
-        auto const separator = text.find('+', start);
-        auto const piece =
-            text.substr(start, separator == std::string_view::npos ? std::string_view::npos : separator - start);
-        if (piece.empty()) return std::nullopt;
-
-        int value{};
-        auto const [end, error] = std::from_chars(piece.data(), piece.data() + piece.size(), value);
-        if (error != std::errc{} || end != piece.data() + piece.size()) return std::nullopt;
-        keys.push_back(value);
-
-        if (separator == std::string_view::npos) break;
-        start = separator + 1;
-    }
-    return make(std::move(keys));
 }
 
 } // namespace mangrove::input

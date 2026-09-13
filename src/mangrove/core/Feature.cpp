@@ -2,22 +2,15 @@
 
 #include "mangrove/Mangrove.h"
 #include "mangrove/core/Config.h"
+#include "mangrove/core/SettingsStore.h"
 #include "mangrove/input/KeyManager.h"
 
 #include "ll/api/i18n/I18n.h"
 
 #include <algorithm>
-#include <cmath>
 #include <utility>
 
 namespace mangrove::core {
-namespace {
-
-/// 判断「值是否等于默认值」的容差。
-/// 滑条是浮点数，经过步长吸附后未必能精确等于默认值，所以不能直接用 `==`。
-constexpr double kSameValueEpsilon = 1e-9;
-
-} // namespace
 
 std::string Feature::displayName() const { return label("name", mId); }
 
@@ -58,17 +51,24 @@ void FeatureManager::install() {
     if (mInstalled) return;
     mInstalled = true;
 
-    auto& config     = Config::getInstance();
+    auto& store      = SettingsStore::getInstance();
     auto& keyManager = input::KeyManager::getInstance();
+    auto& config     = Config::getInstance();
 
     for (auto* feature : mFeatures) {
         if (!feature) continue;
 
-        // 1) 把存过的值套回每个 Setting；没有记录就保留声明时的默认值
+        // 1) 先按框架配置调区间（config/Config.json 里的滑条上下限 / 步长），
+        //    再套玩家存过的值 —— 顺序不能反，值要按最终的区间夹一遍。
         for (auto* setting : feature->settings()) {
-            if (auto const stored = config.getNumber(settingKey(*feature, *setting))) {
-                setting->setValue(*stored);
+            if (!setting) continue;
+            auto const key = settingKey(*feature, *setting);
+
+            if (setting->kind() == Setting::Kind::Number) {
+                auto const range = config.rangeOf(key);
+                setting->overrideRange(range.min, range.max, range.step);
             }
+            if (auto const stored = store.getNumber(key)) setting->setValue(*stored);
         }
 
         // 2) 让功能把配置真正生效（装钩子之类）
@@ -89,17 +89,17 @@ void FeatureManager::uninstall() {
 }
 
 void FeatureManager::notifyChanged(Feature& feature, Setting& setting) {
-    // 先让功能对新值做出反应（装 / 摘钩子之类），再落盘。
+    // 先让功能对新值做出反应（装 / 摘钩子之类），再写库。
     // 顺序反过来的话，功能把值改回去（例如钩子装不上就退回关闭）时存的还是旧值。
     feature.onSettingChanged(setting);
 
     auto const key = settingKey(feature, setting);
 
     // 只存 diff：值等于代码默认值时不该留记录，否则改默认值就会「迁不动」
-    if (std::abs(setting.value() - setting.defaultValue()) <= kSameValueEpsilon) {
-        Config::getInstance().removeNumber(key);
+    if (setting.isDefault()) {
+        SettingsStore::getInstance().removeNumber(key);
     } else {
-        Config::getInstance().setNumber(key, setting.value());
+        SettingsStore::getInstance().setNumber(key, setting.value());
     }
 }
 

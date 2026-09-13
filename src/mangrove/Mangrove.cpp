@@ -2,6 +2,7 @@
 
 #include "mangrove/core/Config.h"
 #include "mangrove/core/Feature.h"
+#include "mangrove/core/SettingsStore.h"
 #include "mangrove/features/freecamera/FreeCamera.h"
 #include "mangrove/input/KeyManager.h"
 #include "mangrove/ui/Overlay.h"
@@ -83,19 +84,24 @@ bool Mangrove::load() {
         result.error().log(logger);
     }
 
-    // 2) 持久化：键位 + 各功能的设置值
-    if (!core::Config::getInstance().load(getSelf().getConfigDir() / "config.json")) {
+    // 2) 玩家设置：键位 + 各功能的设置值（只存和默认值的 diff）。
+    //    落 data/Setting —— 一个 LevelDB，不是 JSON 文件；和 config 目录分开
+    if (!core::SettingsStore::getInstance().load(getSelf().getDataDir() / "Setting")) {
         logger.warn("Settings will not be persisted this session");
     }
 
     // 3) 登记功能
     addFeatures();
 
-    // 4) 输入：先订阅键盘事件，再把功能热键（含玩家的改键）注册进去
+    // 4) 框架配置：各数值设置项的上下限 / 步长（Config.json）。必须排在登记之后 ——
+    //    文件缺失时要照着各功能声明的区间写一份默认值出来。手改、只读，读坏了只报日志
+    core::Config::getInstance().load(getSelf().getConfigDir() / "Config.json");
+
+    // 5) 输入：先订阅键盘事件，再把功能热键（含玩家的改键）注册进去
     input::KeyManager::getInstance().install();
     core::FeatureManager::getInstance().install();
 
-    // 5) 客户端指令
+    // 6) 客户端指令
     mImpl->commandRegisterListener =
         ll::event::EventBus::getInstance().emplaceListener<ll::event::ClientCommandRegisterEvent>(
             [](ll::event::ClientCommandRegisterEvent&) { registerMenuCommand(); }
@@ -124,8 +130,7 @@ bool Mangrove::disable() {
     core::FeatureManager::getInstance().uninstall();
     ui::Overlay::getInstance().uninstall();
 
-    // 界面没了，设置也不会再有改动，这时候落盘
-    core::Config::getInstance().flush();
+    // 设置是直接写库的，这里没有要落盘的东西；界面没了就不会再有新的改动
     return true;
 }
 
@@ -136,7 +141,7 @@ bool Mangrove::unload() {
     }
 
     input::KeyManager::getInstance().uninstall();
-    core::Config::getInstance().close();
+    core::SettingsStore::getInstance().close();
     return true;
 }
 

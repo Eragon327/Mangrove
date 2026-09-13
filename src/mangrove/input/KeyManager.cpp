@@ -1,7 +1,7 @@
 #include "mangrove/input/KeyManager.h"
 
 #include "mangrove/Mangrove.h"
-#include "mangrove/core/Config.h"
+#include "mangrove/core/SettingsStore.h"
 
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/input/KeyInputEvent.h"
@@ -63,10 +63,10 @@ void KeyManager::uninstall() {
 
 void KeyManager::add(std::string name, KeyBind defaultKeys, Handler handler) {
     // 保留一份代码默认键：改回它时要能判断出「这不算改键」
-    auto const codeDefault = defaultKeys;
+    auto codeDefault = defaultKeys;
 
     // 注册时套用玩家改过的键；没有记录就沿用调用点给的默认值
-    if (auto const stored = KeyBind::make(core::Config::getInstance().getKeys(name))) defaultKeys = *stored;
+    if (auto const stored = KeyBind::make(core::SettingsStore::getInstance().getKeys(name))) defaultKeys = *stored;
 
     std::lock_guard lock(mMutex);
     mBindings.push_back(Binding{std::move(name), std::move(defaultKeys), std::move(codeDefault), std::move(handler)});
@@ -85,8 +85,13 @@ bool KeyManager::rebind(std::string_view name, KeyBind keys) {
         iterator->keys = std::move(keys);
     }
 
-    // 只存 diff：改回默认键就删掉记录，让配置文件自己变干净
-    core::Config::getInstance().setKeys(name, sameAsDefault ? std::vector<int>{} : stored);
+    // 只存 diff：改回默认键就不必留记录，让库自己变干净
+    auto& store = core::SettingsStore::getInstance();
+    if (sameAsDefault) {
+        store.removeKeys(name);
+    } else {
+        store.setKeys(name, stored);
+    }
     return true;
 }
 

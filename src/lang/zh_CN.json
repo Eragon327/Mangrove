@@ -26,7 +26,9 @@
         },
         "widget": {
             "numberInput": "123",
-            "numberInputHint": "切换滑条 / 数字输入"
+            "numberInputHint": "切换滑条 / 数字输入",
+            "reset": "重置",
+            "resetHint": "回到默认值"
         },
         "command": {
             "description": "打开 Mangrove 菜单"

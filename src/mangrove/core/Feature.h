@@ -107,7 +107,8 @@ public:
 
     [[nodiscard]] std::vector<Feature*> const& features() const { return mFeatures; }
 
-    /// 设置项被改动后调用：先让功能对新值生效，再落盘（真正写文件由 `Config::flush()` 决定时机）。
+    /// 设置项被改动后调用：先让功能对新值生效，再持久化（`SettingsStore` 直接写库，
+    /// 没有「攒着一起落盘」这一层）。
     static void notifyChanged(Feature& feature, Setting& setting);
 
     /// 设置反馈出口。由 `Mangrove` 接到界面上，功能只喊一声、不认识界面层。
@@ -118,7 +119,8 @@ public:
     /// @note 功能调这个就够了，不需要 include 任何界面头文件。
     void notify(std::string message);
 
-    /// 设置项在配置里的完整 key：`<feature>.<setting>`
+    /// 设置项在设置库（`config/Config.json` 里则是滑条区间）里的完整 key：
+    /// `<feature>.<setting>`
     [[nodiscard]] static std::string settingKey(Feature const& feature, Setting const& setting);
 
 private:

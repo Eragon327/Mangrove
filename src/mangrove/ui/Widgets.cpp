@@ -118,13 +118,18 @@ void settingRow(core::Feature& feature, core::Setting& setting) {
         break;
     }
     case core::Setting::Kind::Number: {
-        // 滑条和输入框是同一个控件的两种编辑方式：右边一个小按钮来回切。
-        auto&       state       = gFieldStates[key];
-        auto const& style       = ImGui::GetStyle();
-        auto const  totalWidth  = controlWidth();
-        auto const  buttonText  = "mangrove.widget.numberInput"_tr();
-        auto const  buttonWidth = ImGui::CalcTextSize(buttonText.c_str()).x + style.FramePadding.x * 2.0f;
-        auto const  fieldWidth  = std::max(40.0f, totalWidth - buttonWidth - style.ItemInnerSpacing.x);
+        // 滑条和输入框是同一个控件的两种编辑方式。右边两个小按钮：
+        // 一个换编辑方式，一个回默认值。
+        auto&       state = gFieldStates[key];
+        auto const& style = ImGui::GetStyle();
+
+        auto const totalWidth  = controlWidth();
+        auto const buttonText  = "mangrove.widget.numberInput"_tr();
+        auto const resetText   = "mangrove.widget.reset"_tr();
+        auto const buttonWidth = ImGui::CalcTextSize(buttonText.c_str()).x + style.FramePadding.x * 2.0f;
+        auto const resetWidth  = ImGui::CalcTextSize(resetText.c_str()).x + style.FramePadding.x * 2.0f;
+        auto const fieldWidth =
+            std::max(40.0f, totalWidth - buttonWidth - resetWidth - style.ItemInnerSpacing.x * 2.0f);
 
         alignControlRight(totalWidth);
         ImGui::SetNextItemWidth(fieldWidth);
@@ -158,7 +163,7 @@ void settingRow(core::Feature& feature, core::Setting& setting) {
                 valueFormat(setting.step())
             );
         }
-        // 拖动 / 输入过程中就写回，功能能立刻看到新值；落盘由 Config 决定时机
+        // 拖动 / 输入过程中就写回，功能能立刻看到新值；写库由 SettingsStore 当场完成
         if (changed) setting.setValue(value);
 
         ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
@@ -186,6 +191,26 @@ void settingRow(core::Feature& feature, core::Setting& setting) {
             state.focusPending = state.textMode;
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "mangrove.widget.numberInputHint"_tr().c_str());
+
+        ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+
+        // 回默认值。已经等于默认值时置灰，但**照样画出来**：
+        // 不画的话这一行里滑条的宽度会在「可重置 / 不可重置」之间跳动。
+        //
+        // @note 和上面那个按钮同理，`BeginDisabled` / `EndDisabled` 必须无条件成对。
+        bool const canReset = !setting.isDefault();
+
+        if (!canReset) ImGui::BeginDisabled();
+        bool const reset = ImGui::Button((resetText + "##reset." + key).c_str());
+        if (!canReset) ImGui::EndDisabled();
+
+        if (reset) {
+            setting.reset();
+            changed = true;
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("%s", "mangrove.widget.resetHint"_tr().c_str());
+        }
         break;
     }
     }

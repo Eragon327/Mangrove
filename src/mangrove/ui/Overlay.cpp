@@ -1,7 +1,7 @@
 #include "mangrove/ui/Overlay.h"
 
 #include "mangrove/Mangrove.h"
-#include "mangrove/core/Config.h"
+#include "mangrove/core/SettingsStore.h"
 #include "mangrove/input/KeyManager.h"
 #include "mangrove/ui/InputGuard.h"
 #include "mangrove/ui/Menu.h"
@@ -1146,7 +1146,7 @@ bool Overlay::install() {
 
     // 菜单开关热键：优先用持久化的改键，没有记录就 X + C
     auto const defaultKeys = std::vector<int>{kDefaultMenuToggleKeys.begin(), kDefaultMenuToggleKeys.end()};
-    auto       menuKeys    = input::KeyBind::make(core::Config::getInstance().getKeys(kMenuToggleBinding));
+    auto       menuKeys    = input::KeyBind::make(core::SettingsStore::getInstance().getKeys(kMenuToggleBinding));
     if (!menuKeys) menuKeys = input::KeyBind::make(defaultKeys);
     {
         std::lock_guard lock(gMenuKeysMutex);
@@ -1291,7 +1291,12 @@ void Overlay::setMenuToggleKeys(input::KeyBind keys) {
         gMenuToggleKeys = std::move(keys);
     }
 
-    core::Config::getInstance().setKeys(kMenuToggleBinding, sameAsDefault ? std::vector<int>{} : stored);
+    auto& store = core::SettingsStore::getInstance();
+    if (sameAsDefault) {
+        store.removeKeys(kMenuToggleBinding);
+    } else {
+        store.setKeys(kMenuToggleBinding, stored);
+    }
     logger().debug("Menu hotkey updated");
 }
 

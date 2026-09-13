@@ -5,7 +5,6 @@
 #include <array>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace mangrove::input {
@@ -78,12 +77,6 @@ public:
 
     /// 展示文本，例如 "X + C"；空组合显示为 "-"
     [[nodiscard]] std::string display() const;
-
-    /// 供日志 / 配置文件使用的人读形式，例如 "88+67"
-    [[nodiscard]] std::string toString() const;
-
-    /// 解析 "88+67"；失败返回 `std::nullopt`
-    [[nodiscard]] static std::optional<KeyBind> fromString(std::string_view text);
 
 private:
     explicit KeyBind(std::vector<int> keys);
