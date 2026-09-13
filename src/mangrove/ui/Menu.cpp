@@ -86,7 +86,7 @@ void render() {
     if (viewport.x <= 0.0f || viewport.y <= 0.0f) return;
 
     // 以 900 逻辑高度为基准推算缩放，1080p / 4K / 小窗口下都保持可读
-    theme::apply(calculateMetrics(viewport, std::max(1.0f, viewport.y / 900.0f)));
+    theme::apply(viewport);
 
     constexpr ImGuiWindowFlags kWindowFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove

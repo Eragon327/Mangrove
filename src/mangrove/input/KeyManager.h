@@ -59,6 +59,11 @@ public:
     ///       恢复时按住状态会一并清掉，所以「菜单开着时按住的键」不会在关掉后补触发。
     void setSuppressed(bool suppressed);
 
+    /// 界面是否正在独占输入。
+    /// @note 功能层用它判断「现在输入归界面」：例如自由视角要清掉按住状态，
+    ///       否则菜单打开期间松开的键会永远停在按住，关掉菜单后相机一直飞。
+    [[nodiscard]] bool isSuppressed() const { return mSuppressed.load(std::memory_order_acquire); }
+
     /// 所有绑定（按注册顺序），供快捷键页展示
     struct Entry {
         std::string name;

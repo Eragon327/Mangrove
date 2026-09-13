@@ -116,6 +116,12 @@ void apply(UiMetrics const& metrics) {
     gLastViewport = metrics.viewport;
 }
 
+void apply(ImVec2 viewport) {
+    if (viewport.x <= 0.0f || viewport.y <= 0.0f) return;
+    // 以 900 逻辑高度为基准推算缩放，1080p / 4K / 小窗口下都保持可读
+    apply(calculateMetrics(viewport, std::max(1.0f, viewport.y / 900.0f)));
+}
+
 void reset() {
     gBaseStyleReady = false;
     gLastScale      = -1.0f;

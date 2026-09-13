@@ -88,7 +88,11 @@ void FeatureManager::uninstall() {
     mInstalled = false;
 }
 
-void FeatureManager::notifyChanged(Feature const& feature, Setting const& setting) {
+void FeatureManager::notifyChanged(Feature& feature, Setting& setting) {
+    // 先让功能对新值做出反应（装 / 摘钩子之类），再落盘。
+    // 顺序反过来的话，功能把值改回去（例如钩子装不上就退回关闭）时存的还是旧值。
+    feature.onSettingChanged(setting);
+
     auto const key = settingKey(feature, setting);
 
     // 只存 diff：值等于代码默认值时不该留记录，否则改默认值就会「迁不动」

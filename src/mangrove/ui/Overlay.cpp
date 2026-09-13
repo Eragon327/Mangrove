@@ -8,6 +8,11 @@
 #include "mangrove/ui/Theme.h"
 #include "mangrove/ui/Widgets.h"
 
+#include "ll/api/service/TargetedBedrock.h"
+
+#include "mc/client/game/ClientInstance.h"
+#include "mc/client/player/LocalPlayer.h"
+
 #include <Windows.h>
 
 // 部分 SDK 版本的 d3d12.h 会和 d3d11on12.h 重复定义这几个结构体，先改名绕开
@@ -106,6 +111,15 @@ std::atomic_bool gVisible{false};
 bool             gGraphicsReady{};
 bool             gVisibleLastFrame{};
 std::mutex       gResourceMutex;
+
+/// 图形/ImGui 就绪后，还要无条件空跑几帧的计数。
+///
+/// 字体图集（两万个汉字的光栅化）与字体贴图都是在**第一次 `ImGui_ImplDX11_NewFrame()`**
+/// 里才建的，而 `render()` 在「菜单关着 + 没提示」时直接返回，于是这笔开销会长在
+/// 「玩家第一次按热键弹提示 / 第一次开菜单」那一帧上 —— 典型的一秒钟顿帧。
+/// 这里让它在初始化之后的头几帧就跑掉：那时候还在加载画面，顿一下没人介意。
+constexpr int kWarmupFrames = 2;
+int           gWarmupFrames{};
 
 /// ImGui 是否正在收键盘（有文本框在编辑）。
 ///
@@ -723,6 +737,9 @@ bool initializeGraphics(IDXGISwapChain* swapChain) {
     }
 
     gGraphicsReady = true;
+    // 就绪之后先把字体图集那笔一次性开销在这一帧（或下几帧）里付掉，
+    // 不要留给「第一次弹提示」——见 `kWarmupFrames` 的说明。
+    gWarmupFrames = kWarmupFrames;
     return true;
 }
 
@@ -794,6 +811,13 @@ void drawFrame(ID3D11RenderTargetView* target) {
 
     // 下完帧才有本帧的 WantTextInput，把它发成快照给窗口线程（它不能自己来问）
     gTextInputActive.store(ImGui::GetIO().WantTextInput, std::memory_order_relaxed);
+
+    // 主题必须在**下帧之后、任何窗口之前**套用：
+    // 提示条是菜单关着的时候画的，而主题以前只在 `Menu::render()` 里套 ——
+    // 于是「第一次开菜单之前」的提示条画在 ImGui 默认样式上：
+    //   `FontGlobalScale` 还是 1.0（32px 的字体图集按原尺寸出来，字号是菜单里的近两倍），
+    //   默认样式的 `WindowBorderSize = 1` 还会给窗口描一圈白边。
+    theme::apply(ImGui::GetIO().DisplaySize);
 
     if (Overlay::getInstance().isVisible()) menu::render();
     drawToasts();
@@ -872,8 +896,13 @@ void render(IDXGISwapChain* swapChain) {
     if (gVisibleLastFrame && !visible) releaseImGuiInputState();
     gVisibleLastFrame = visible;
 
-    // 菜单关着又没有提示要画时，完全不进入 ImGui 帧
-    if (!visible && !toastAlive()) return;
+    // 菜单关着又没有提示要画时，完全不进入 ImGui 帧 ——
+    // 除了刚初始化完的那几帧：要把字体图集/字体贴图这些一次性开销提前花掉。
+    if (gWarmupFrames > 0) {
+        --gWarmupFrames;
+    } else if (!visible && !toastAlive()) {
+        return;
+    }
 
     ImGui::GetIO().MouseDrawCursor = visible;
     if (visible) ClipCursor(nullptr);
@@ -1207,6 +1236,17 @@ void Overlay::uninstall() {
 bool Overlay::isVisible() const { return gVisible.load(std::memory_order_acquire); }
 
 void Overlay::setVisible(bool visible) {
+    // 存档外不提供界面：菜单里的东西都得在世界里才有意义，
+    // 而且没进世界就改写渲染管线只会引入一堆没人想要的边界情况。
+    // 这里拦一道，热键 / 指令 / 关闭按钮三条入口就都盖住了。
+    if (visible) {
+        auto client = ll::service::getClientInstance();
+        if (!client || !client->getLocalPlayer()) {
+            logger().debug("Ignoring the menu request because no world is loaded");
+            return;
+        }
+    }
+
     if (gVisible.exchange(visible, std::memory_order_acq_rel) == visible) return;
 
     // 菜单是模态的：开着的时候一个热键都不响应，包括开关热键自己

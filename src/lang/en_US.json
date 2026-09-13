@@ -36,9 +36,9 @@
                 "name": "Free camera",
                 "enabled": "Enabled",
                 "speed": "Speed",
-                "fov": "Field of view",
                 "on": "Free camera enabled",
-                "off": "Free camera disabled"
+                "off": "Free camera disabled",
+                "failed": "Free camera failed to start; see the log"
             }
         }
     }

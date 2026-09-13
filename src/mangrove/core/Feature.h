@@ -59,6 +59,13 @@ public:
     /// 需要「把配置真正生效」的功能（例如按开关状态装钩子）在这里做。
     virtual void onSettingsLoaded() {}
 
+    /// 某个设置项的值被界面改动后调用（勾选框 / 滑条 / 数字输入）。
+    /// 需要「值一变就生效」的功能在这里处理；持久化由框架负责。
+    ///
+    /// @note 派发点在 `FeatureManager::notifyChanged`，而功能自己改回设置值
+    ///       （例如钩子装不上就退回关闭）也会再触发一次，所以这里的处理必须**幂等**。
+    virtual void onSettingChanged(Setting& /*setting*/) {}
+
     /// mod 停用 / 卸载时清理（摘钩子、关功能）
     virtual void onShutdown() {}
 
@@ -100,8 +107,8 @@ public:
 
     [[nodiscard]] std::vector<Feature*> const& features() const { return mFeatures; }
 
-    /// 设置项被改动后调用，负责落盘（真正写文件由 `Config::flush()` 决定时机）。
-    static void notifyChanged(Feature const& feature, Setting const& setting);
+    /// 设置项被改动后调用：先让功能对新值生效，再落盘（真正写文件由 `Config::flush()` 决定时机）。
+    static void notifyChanged(Feature& feature, Setting& setting);
 
     /// 设置反馈出口。由 `Mangrove` 接到界面上，功能只喊一声、不认识界面层。
     using Notifier = std::function<void(std::string)>;
