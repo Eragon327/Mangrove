@@ -33,7 +33,10 @@ public:
 
     /// 改键结果回调。
     /// @param target 绑定的稳定名
-    /// @param result 新键位；为空表示玩家取消了这次改键
+    /// @param result 三态：
+    ///        - 有值且非空 —— 绑到这一组键；
+    ///        - **有值但为空** —— 玩家按了 Esc，**解绑**（清成空）；
+    ///        - `std::nullopt` —— 捕获被**取消**（菜单关了之类），什么都别做。
     using CaptureCallback = std::function<void(std::string const& target, std::optional<input::KeyBind> result)>;
 
     static Overlay& getInstance();
@@ -58,14 +61,18 @@ public:
     // -----------------------------------------------------------------------
 
     [[nodiscard]] input::KeyBind menuToggleKeys() const;
-    void                         setMenuToggleKeys(input::KeyBind keys);
+    void                         setMenuToggleKeys(input::KeyBind const& keys);
+
+    /// 菜单开关热键的代码默认值（X + C）。
+    /// @note 快捷键页的「重置」按钮用它判断「已经回到默认」，也是解绑后的恢复值。
+    [[nodiscard]] static input::KeyBind defaultMenuToggleKeys();
 
     // -----------------------------------------------------------------------
     // 改键捕获
     // -----------------------------------------------------------------------
 
     /// 进入捕获：接下来按下的组合键会通过 @p onFinished 交给调用方去生效与持久化。
-    /// 捕获期间 Esc 取消。
+    /// 捕获期间按 Esc 提交一个**空组合** —— 那是「解绑」，不是「取消」。
     void beginCapture(std::string target, CaptureCallback onFinished);
 
     /// 放弃当前捕获（不修改任何绑定）

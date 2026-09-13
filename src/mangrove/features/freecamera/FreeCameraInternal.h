@@ -77,8 +77,11 @@ void freezeInput();
 /// 只读当前姿态，不推进。相机钩子用它判断「是否已经拿到起点」。
 [[nodiscard]] std::optional<Pose> peek();
 
-/// 关闭：丢弃姿态。相机位置刻意不持久化，下次启用重新从玩家眼睛起步。
-void reset();
+/// 丢弃姿态。相机位置刻意不持久化，下次启用重新从玩家眼睛起步。
+/// @param start 下一帧的起点；空的表示"用引擎那一帧的原生相机"（`update()` 的入参）。
+///              指定它只有一种用法：**换世界 / 换维度** —— 那时引擎手里那份世界相机
+///              就是我们自己上一帧写进去的旧坐标，不能当起点，得直接送回玩家身上。
+void reset(std::optional<Pose> start = std::nullopt);
 
 } // namespace state
 

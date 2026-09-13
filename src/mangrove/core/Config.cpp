@@ -5,6 +5,7 @@
 
 #include "ll/api/Config.h"
 
+#include <cmath>
 #include <exception>
 #include <utility>
 
@@ -26,11 +27,13 @@ void Config::load(std::filesystem::path const& file) {
         if (!feature) continue;
         for (auto* setting : feature->settings()) {
             // 只有数值项有区间；开关就是 0 / 1，没得调
-            if (!setting || setting->kind() != Setting::Kind::Number) continue;
+            if (!setting || !setting->isNumeric()) continue;
 
             auto& range = mData.sliders[FeatureManager::settingKey(*feature, *setting)];
-            if (!range.min) range.min = setting->min();
-            if (!range.max) range.max = setting->max();
+            // 无界的这一头不写进文件：JSON 里没有 inf，写出来是 null，读回来又变回「没配」。
+            // 留空即可，声明里的 ±inf 原样生效（界面此时按输入框处理 —— 滑条要两头都有限）。
+            if (!range.min && std::isfinite(setting->min())) range.min = setting->min();
+            if (!range.max && std::isfinite(setting->max())) range.max = setting->max();
             if (!range.step) range.step = setting->step();
         }
     }

@@ -155,4 +155,27 @@ std::string KeyBind::display() const {
     return result;
 }
 
+namespace {
+
+/// `shorter` 是不是 `longer` 的**前缀**（按存储顺序 = 按下顺序），而且确实更短
+[[nodiscard]] bool isLeadingPartOf(std::vector<int> const& shorter, std::vector<int> const& longer) {
+    if (shorter.size() >= longer.size()) return false;
+    return std::equal(shorter.begin(), shorter.end(), longer.begin());
+}
+
+} // namespace
+
+ConflictSeverity classifyConflict(KeyBind const& a, KeyBind const& b) {
+    // 没绑键的槽不参与：空组合永远不会命中，谈不上撞
+    if (a.empty() || b.empty()) return ConflictSeverity::None;
+    if (a.equals(b)) return ConflictSeverity::Exact;
+
+    // 只有「短的是长的的前缀」才算撞（`X` 与 `X + C`）。
+    // 反方向的 `C` 与 `X + C` **不算**：两者触发键都是 `C`，长的直接胜出。
+    if (isLeadingPartOf(a.keys(), b.keys()) || isLeadingPartOf(b.keys(), a.keys())) {
+        return ConflictSeverity::Overlap;
+    }
+    return ConflictSeverity::None;
+}
+
 } // namespace mangrove::input

@@ -54,6 +54,11 @@ inline constexpr int kMouseX2     = 0x06; ///< VK_XBUTTON2（侧键 2）
 /// 判定语义：触发键按下的瞬间，组合里所有键都处于按住状态。
 /// @note 额外要求「按住键数 == 组合长度」看似更严谨，但会让玩家按住 W 走路时按不出热键，
 ///       所以冲突消解放在 KeyManager 里做（只触发键数最多的那条绑定）。
+///
+/// **空组合是合法值**，表示「这个热键槽没绑任何键」—— 默认构造 `KeyBind{}` 就是它。
+/// `display()` 显示 "-"、`trigger()` 为 0，所以永远不会命中判定（天然惰性）。
+/// @note 但 `make({})` 仍然返回 `std::nullopt`：那条判据是给**捕获结果**用的，
+///       捕获到空组合属于输入非法，不是「解绑」。
 class KeyBind {
 public:
     KeyBind() = default;
@@ -84,5 +89,25 @@ private:
     std::vector<int> mKeys;
     int              mTrigger{};
 };
+
+/// 两条绑定「撞」到什么程度。界面按严重度上色：精确重复最狠，前缀重叠次之。
+enum class ConflictSeverity {
+    None,    ///< 不相干
+    Overlap, ///< 短的是长的的**前缀**（例如 `X` 与 `X + C`）
+    Exact,   ///< 完全重复
+};
+
+/// 两条绑定撞到的程度。
+///
+/// 「撞」只有一种：**短的那条是长的那条的前缀**（按存储顺序 = 按下顺序），也就是
+/// `X` 与 `X + C`。这时短的那条会在长的那条还没成形时就先响 —— 想用 `X + C`，
+/// 必然先触发一次 `X`。
+///
+/// 反方向**不算**：`C` 与 `X + C` 的触发键都是 `C`，`KeyManager::handlePress` 的
+/// 「键数最多者胜」会把短的那条直接筛掉，`C` 单独按也照常工作，两者互不干扰。
+///
+/// @note 顺序有意义：`None < Overlap < Exact`，多处撞车时用 `std::max` 取最严重的那个，
+///       于是「红压黄」不需要任何额外判断。
+[[nodiscard]] ConflictSeverity classifyConflict(KeyBind const& a, KeyBind const& b);
 
 } // namespace mangrove::input

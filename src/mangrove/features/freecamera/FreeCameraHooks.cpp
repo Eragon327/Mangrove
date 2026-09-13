@@ -449,7 +449,7 @@ LL_TYPE_INSTANCE_HOOK(
 
     std::uint32_t const bit = movementBit(keyCode);
     if (bit != 0) {
-        gHidController.store(static_cast<HIDControllerGameCoreDesktop*>(this), std::memory_order_release);
+        gHidController.store(this, std::memory_order_release);
         gPhysicalKeys.fetch_or(bit, std::memory_order_acq_rel);
     }
 
@@ -476,7 +476,7 @@ LL_TYPE_INSTANCE_HOOK(
 
     std::uint32_t const bit = movementBit(keyCode);
     if (bit != 0) {
-        gHidController.store(static_cast<HIDControllerGameCoreDesktop*>(this), std::memory_order_release);
+        gHidController.store(this, std::memory_order_release);
         gPhysicalKeys.fetch_and(~bit, std::memory_order_acq_rel);
     }
 
@@ -517,17 +517,24 @@ LL_TYPE_INSTANCE_HOOK(
     auto  client = ll::service::getClientInstance();
     auto* player = client ? client->getLocalPlayer() : nullptr;
 
-    auto& level = *static_cast<LevelRendererPlayer*>(this);
+    auto& level = *this;
 
     // 换世界 / 换维度 / 死亡重生：玩家对象或维度变了，旧姿态在新世界里毫无意义。
+    //
+    // 起点**必须**是玩家（眼睛 + 朝向），不能沿用上面那种"引擎那一帧的相机"：
+    // 那一份正是我们自己上一帧写进去的旧坐标 —— 在新维度里就是悬在半空 / 卡在方块里，
+    // 也就是"切完维度相机没跟着回来"。
+    //
     // 顺便把"按住的移动键"也清掉：换世界的瞬间手还按着 W 的话，掩码会一直留到下次开启，
     // 那时候自由相机会自己往前飘（而我们以为玩家还按着）。
     // HID 实例指针也一起丢：它可能已经换了主人。
-    int const dimension = player ? static_cast<int>(player->getDimensionId()) : 0;
+    int const dimension = player ? player->getDimensionId().mValue : 0;
     if (player != gLastPlayer || dimension != gLastDimension) {
         gLastPlayer    = player;
         gLastDimension = dimension;
-        state::reset();
+        // 玩家还没就位（刚进新世界 / 位置非法）时 `playerEyePose()` 给空值，
+        // 那时退回"用引擎那一帧的相机"，至少不会把相机丢到非法坐标上。
+        state::reset(nativeStartPose(level));
         gPhysicalKeys.store(0, std::memory_order_release);
         gHidController.store(nullptr, std::memory_order_release);
     }
@@ -557,7 +564,7 @@ LL_TYPE_INSTANCE_HOOK(
 
     if (!state::active()) return;
 
-    auto&      level = *static_cast<LevelRendererPlayer*>(this);
+    auto&      level = *this;
     auto const pose  = state::peek();
     if (pose) refreshEngineCamera(level, *pose);
 }
@@ -572,7 +579,7 @@ LL_TYPE_INSTANCE_HOOK(
     void,
     ::LevelRenderPreRenderUpdateParameters const& parameters
 ) {
-    auto&      level = *static_cast<LevelRendererPlayer*>(this);
+    auto&      level = *this;
     auto const pose  = state::peek();
 
     if (pose && state::active()) refreshEngineCamera(level, *pose);

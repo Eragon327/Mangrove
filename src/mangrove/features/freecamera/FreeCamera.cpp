@@ -217,8 +217,8 @@ std::optional<Pose> update(bool frozen, std::optional<Pose> const& nativeStart) 
 
 std::optional<Pose> peek() { return gPose; }
 
-void reset() {
-    gPose.reset();
+void reset(std::optional<Pose> start) {
+    gPose      = start;
     gLastFrame = {};
     freezeInput();
 }

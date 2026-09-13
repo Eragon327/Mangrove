@@ -31,6 +31,10 @@ namespace mangrove::core {
 /// 改代码里的默认值不需要任何迁移。判「等不等于默认」由 `Setting::isDefault()` /
 /// `KeyBind::equals()` 负责，这里只提供 `set` 和 `remove` 两个动作。
 ///
+/// @note 键位这边的**空数组是一条有意义的记录**：玩家明确解绑了。所以 `getKeys()` 返回
+///       `std::optional` —— `nullopt` 是「没有记录」，空的 vector 是「记录就是空的」。
+///       两者塌成同一个值的话，解绑过的键会在下次启动时悄悄回到默认值。
+///
 /// @note 没有 `flush()`：LevelDB 的写是 O(1) 追加，写下去就在库里，
 ///       不必像 JSON 那样攒着等合适时机整份重写。
 /// @note 没有锁：`ll::data::KeyValueDB` 的读写是线程安全的，而库句柄只在 `load` /
@@ -68,8 +72,10 @@ public:
     // 按键绑定
     // -----------------------------------------------------------------------
 
-    /// 键码数组；没有记录 / 记录不合法时返回空
-    [[nodiscard]] std::vector<int> getKeys(std::string_view name) const;
+    /// 键码数组。
+    /// @returns `std::nullopt` = **没有记录**（用代码默认键）或记录不合法；
+    ///          有值但**为空** = 玩家明确**解绑**（合法状态，与「没有记录」不是一回事）
+    [[nodiscard]] std::optional<std::vector<int>> getKeys(std::string_view name) const;
 
     void setKeys(std::string_view name, std::vector<int> const& keys);
 

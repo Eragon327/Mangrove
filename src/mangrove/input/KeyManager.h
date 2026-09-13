@@ -44,15 +44,20 @@ public:
     /// 取消订阅并清空所有绑定。重复调用安全。
     void uninstall();
 
-    /// 注册热键。若设置库里有改键记录，@p defaultKeys 会被玩家的设置覆盖。
+    /// 注册热键。设置库里有记录就套用它 —— **包括「记录是空的」**（玩家解绑过）。
     /// @param name 稳定标识，形如 `feature.FreeCamera`
-    void add(std::string name, KeyBind defaultKeys, Handler handler);
+    /// @param codeDefault 代码里的默认键；没记录 / 记录坏了 / 玩家改回默认时用它
+    void add(std::string name, KeyBind codeDefault, Handler handler);
 
     /// 改键：更新内存里的绑定并立即落盘。
     /// @returns 是否找到该绑定
     bool rebind(std::string_view name, KeyBind keys);
 
     [[nodiscard]] std::optional<KeyBind> keys(std::string_view name) const;
+
+    /// 这组键和**别的**绑定撞到什么程度（界面按严重度上色：完全重复 > 包含关系）。
+    /// @note 别拿 ImGui 的 ID 冲突当检测 —— 那只是控件没有唯一 ID，和绑定内容无关。
+    [[nodiscard]] ConflictSeverity conflictOf(std::string_view name, KeyBind const& keys) const;
 
     /// 界面（菜单）打开时压制所有热键派发。
     /// @note 这是第二道保险：主路径上 `ui::InputGuard` 已经让事件不发布了。

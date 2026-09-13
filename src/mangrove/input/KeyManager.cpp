@@ -61,15 +61,23 @@ void KeyManager::uninstall() {
     mDispatching = false;
 }
 
-void KeyManager::add(std::string name, KeyBind defaultKeys, Handler handler) {
-    // 保留一份代码默认键：改回它时要能判断出「这不算改键」
-    auto codeDefault = defaultKeys;
-
-    // 注册时套用玩家改过的键；没有记录就沿用调用点给的默认值
-    if (auto const stored = KeyBind::make(core::SettingsStore::getInstance().getKeys(name))) defaultKeys = *stored;
+void KeyManager::add(std::string name, KeyBind codeDefault, Handler handler) {
+    // 实际生效的键：设置库里有记录就用它，没记录 / 记录坏了才用代码默认键。
+    //
+    // 「有记录但为空数组」= 玩家**明确解绑**，和「没有记录」必须分开 —— 否则解绑过的
+    // 热键会在下次启动时悄悄回到默认值（`getKeys()` 用 optional 区分这两者）。
+    KeyBind keys = codeDefault;
+    if (auto const stored = core::SettingsStore::getInstance().getKeys(name)) {
+        if (stored->empty()) {
+            keys = KeyBind{};
+        } else if (auto const parsed = KeyBind::make(*stored)) {
+            keys = *parsed;
+        }
+        // 键码非法：当作没记录，继续用代码默认键
+    }
 
     std::lock_guard lock(mMutex);
-    mBindings.push_back(Binding{std::move(name), std::move(defaultKeys), std::move(codeDefault), std::move(handler)});
+    mBindings.push_back(Binding{std::move(name), std::move(keys), std::move(codeDefault), std::move(handler)});
 }
 
 bool KeyManager::rebind(std::string_view name, KeyBind keys) {
@@ -85,7 +93,8 @@ bool KeyManager::rebind(std::string_view name, KeyBind keys) {
         iterator->keys = std::move(keys);
     }
 
-    // 只存 diff：改回默认键就不必留记录，让库自己变干净
+    // 只存 diff：改回默认键就删掉记录（= 用默认）；否则写下来 ——
+    // **空数组也照写**，那是「明确解绑」，和「没记录」不是一回事。
     auto& store = core::SettingsStore::getInstance();
     if (sameAsDefault) {
         store.removeKeys(name);
@@ -100,6 +109,20 @@ std::optional<KeyBind> KeyManager::keys(std::string_view name) const {
     auto const      iterator = std::ranges::find(mBindings, name, &Binding::name);
     if (iterator == mBindings.end()) return std::nullopt;
     return iterator->keys;
+}
+
+ConflictSeverity KeyManager::conflictOf(std::string_view name, KeyBind const& keys) const {
+    if (keys.empty()) return ConflictSeverity::None; // 没绑键不算冲突
+
+    std::lock_guard  lock(mMutex);
+    ConflictSeverity worst = ConflictSeverity::None;
+    for (auto const& binding : mBindings) {
+        if (binding.name == name) continue;
+
+        worst = std::max(worst, classifyConflict(keys, binding.keys));
+        if (worst == ConflictSeverity::Exact) break; // 已经是最严重的了
+    }
+    return worst;
 }
 
 std::vector<KeyManager::Entry> KeyManager::entries() const {

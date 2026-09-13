@@ -7,11 +7,15 @@
                 "features": "Features",
                 "hotkeys": "Hotkeys"
             },
-            "hotkeysHint": "Click a hotkey to rebind it, then press a key combination or a mouse button. Esc cancels.",
+            "hotkeysHint": "Click a hotkey to rebind it, then press a key combination or a mouse button. Esc during capture unbinds it.",
             "capturing": "Press keys...",
-            "cancelHint": "Esc to cancel",
+            "unbindHint": "Esc to unbind (clear this hotkey)",
             "rebindHint": "Click to rebind",
+            "keyConflict": "This hotkey duplicates another binding and both will fire; click to change it",
+            "keyOverlap": "This hotkey prefix-overlaps another binding (e.g. X and X + C) and they interfere; click to change it",
             "rebound": "Hotkey updated",
+            "unbound": "Hotkey unbound",
+            "reset": "Hotkey reset",
             "noFeatures": "No features registered yet.",
             "binding": {
                 "menuToggle": "Open / close menu"
@@ -34,6 +38,14 @@
             "description": "Open the Mangrove menu"
         },
         "feature": {
+            "AutoTool": {
+                "name": "Auto tool",
+                "enabled": "Enabled",
+                "minDamage": "Min durability",
+                "on": "Auto tool enabled",
+                "off": "Auto tool disabled",
+                "failed": "Auto tool failed to start; see the log"
+            },
             "FreeCamera": {
                 "name": "Free camera",
                 "enabled": "Enabled",

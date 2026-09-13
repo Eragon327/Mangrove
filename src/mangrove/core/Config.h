@@ -10,6 +10,10 @@ namespace mangrove::core {
 
 /// 一条数值设置的区间覆盖。
 /// 三个字段都是可选的：只想改上限就只写 `max`，其余照旧。
+/// @note 区间可以有一端是 `±inf`（代码里声明，或这里写一个超大数被解析成 inf）：
+///       这一头没有边界，界面会按输入框处理。但注意 **inf 存不住** ——
+///       一旦 LL 重写这份文件，`dump()` 会把非有限数写成 `null`，下次读回来就是「没配」。
+///       想要「只能打字」的控制请用 `NumberInputSetting`，上限给 `int` 极值之类的有限值。
 struct SliderRange {
     std::optional<double> min;
     std::optional<double> max;

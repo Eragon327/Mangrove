@@ -489,7 +489,9 @@ bool handleCaptureMessage(UINT message, WPARAM wParam) {
     }
 
     if (code == VK_ESCAPE) {
-        finishCapture(std::nullopt);
+        // Esc 不是「取消」而是**解绑**：交一个空的 KeyBind 出去。
+        // 真·取消（菜单关掉、overlay 卸下）走 `cancelCapture()`，那边交的是 `nullopt`。
+        finishCapture(input::KeyBind{});
         return true;
     }
 
@@ -546,7 +548,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         Overlay::getInstance().cancelCapture();
     }
 
-    // 0) 改键捕获：按键与鼠标消息全部由覆盖层处理（含 Esc 取消），不触发开关也不进游戏
+    // 0) 改键捕获：按键与鼠标消息全部由覆盖层处理（含 Esc 解绑），不触发开关也不进游戏
     if (gCapturing.load(std::memory_order_acquire) && handleCaptureMessage(message, wParam)) return 1;
 
     auto const imguiReady = gImGuiReady.load(std::memory_order_acquire);
@@ -1144,13 +1146,19 @@ bool Overlay::install() {
 
     gShuttingDown.store(false, std::memory_order_release);
 
-    // 菜单开关热键：优先用持久化的改键，没有记录就 X + C
-    auto const defaultKeys = std::vector<int>{kDefaultMenuToggleKeys.begin(), kDefaultMenuToggleKeys.end()};
-    auto       menuKeys    = input::KeyBind::make(core::SettingsStore::getInstance().getKeys(kMenuToggleBinding));
-    if (!menuKeys) menuKeys = input::KeyBind::make(defaultKeys);
+    // 菜单开关热键：代码默认 X + C；设置库里有记录就盖过去。
+    // 「有记录但为空数组」= 玩家明确解绑，不能当成「没记录」而退回默认。
+    input::KeyBind menuKeys = defaultMenuToggleKeys();
+    if (auto const stored = core::SettingsStore::getInstance().getKeys(kMenuToggleBinding)) {
+        if (stored->empty()) {
+            menuKeys = input::KeyBind{};
+        } else if (auto const parsed = input::KeyBind::make(*stored)) {
+            menuKeys = *parsed;
+        }
+    }
     {
         std::lock_guard lock(gMenuKeysMutex);
-        gMenuToggleKeys = *menuKeys;
+        gMenuToggleKeys = std::move(menuKeys);
     }
 
     if (!hookSwapChainEntryPoints(window)) {
@@ -1277,25 +1285,27 @@ void Overlay::toggle() { setVisible(!isVisible()); }
 
 input::KeyBind Overlay::menuToggleKeys() const { return menuToggleKeysSnapshot(); }
 
-void Overlay::setMenuToggleKeys(input::KeyBind keys) {
-    if (keys.empty()) return;
+input::KeyBind Overlay::defaultMenuToggleKeys() {
+    return input::KeyBind::make(std::vector<int>{kDefaultMenuToggleKeys.begin(), kDefaultMenuToggleKeys.end()})
+        .value_or(input::KeyBind{});
+}
 
-    auto const defaultKeys =
-        input::KeyBind::make(std::vector<int>{kDefaultMenuToggleKeys.begin(), kDefaultMenuToggleKeys.end()});
-    // 只存 diff：改回 X + C 就删掉记录
-    bool const sameAsDefault = defaultKeys && keys.equals(*defaultKeys);
+void Overlay::setMenuToggleKeys(input::KeyBind const& keys) {
+    // 空组合是允许的：那是「解绑」，之后只能用 `/mangrove` 指令开菜单（指令本来就是
+    // 为「热键失灵」准备的兜底入口），或者进来之后点那一行的「重置」恢复 X + C。
+    bool const sameAsDefault = keys.equals(defaultMenuToggleKeys());
 
-    auto const stored = keys.keys();
     {
         std::lock_guard lock(gMenuKeysMutex);
-        gMenuToggleKeys = std::move(keys);
+        gMenuToggleKeys = keys; // 存一份
     }
 
+    // 空数组也照写：那是「明确解绑」，不是「没有记录」
     auto& store = core::SettingsStore::getInstance();
     if (sameAsDefault) {
         store.removeKeys(kMenuToggleBinding);
     } else {
-        store.setKeys(kMenuToggleBinding, stored);
+        store.setKeys(kMenuToggleBinding, keys.keys());
     }
     logger().debug("Menu hotkey updated");
 }

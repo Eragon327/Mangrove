@@ -64,7 +64,7 @@ void FeatureManager::install() {
             if (!setting) continue;
             auto const key = settingKey(*feature, *setting);
 
-            if (setting->kind() == Setting::Kind::Number) {
+            if (setting->isNumeric()) {
                 auto const range = config.rangeOf(key);
                 setting->overrideRange(range.min, range.max, range.step);
             }

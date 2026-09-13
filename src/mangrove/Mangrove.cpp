@@ -3,6 +3,7 @@
 #include "mangrove/core/Config.h"
 #include "mangrove/core/Feature.h"
 #include "mangrove/core/SettingsStore.h"
+#include "mangrove/features/autotool/AutoTool.h"
 #include "mangrove/features/freecamera/FreeCamera.h"
 #include "mangrove/input/KeyManager.h"
 #include "mangrove/ui/Overlay.h"
@@ -57,6 +58,7 @@ void registerMenuCommand() {
 /// 菜单页、持久化、改变热键都不需要额外代码 —— 参考 `features/freecamera/`。
 void addFeatures() {
     auto& manager = core::FeatureManager::getInstance();
+    manager.add(features::AutoTool::getInstance());
     manager.add(features::FreeCamera::getInstance());
 }
 

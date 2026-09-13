@@ -73,22 +73,23 @@ void SettingsStore::removeNumber(std::string_view key) {
     if (mDatabase) mDatabase->del(prefixed(kSettingPrefix, key));
 }
 
-std::vector<int> SettingsStore::getKeys(std::string_view name) const {
-    if (!mDatabase) return {};
+std::optional<std::vector<int>> SettingsStore::getKeys(std::string_view name) const {
+    if (!mDatabase) return std::nullopt;
 
     auto const stored = mDatabase->get(prefixed(kKeybindPrefix, name));
-    if (!stored) return {};
+    if (!stored) return std::nullopt;
 
     auto const parsed = nlohmann::json::parse(*stored, nullptr, false);
-    if (!parsed.is_array()) return {};
+    if (!parsed.is_array()) return std::nullopt;
 
     std::vector<int> keys;
     keys.reserve(parsed.size());
     for (auto const& element : parsed) {
         // 键码合法性交给 input 层判：和改键捕获用的是同一套规则
-        if (!element.is_number_integer() || !input::isValidKey(element.get<int>())) return {};
+        if (!element.is_number_integer() || !input::isValidKey(element.get<int>())) return std::nullopt;
         keys.push_back(element.get<int>());
     }
+    // 空数组照样是**有效**返回值：它是「玩家解绑了」，不能退化成「没有记录」
     return keys;
 }
 

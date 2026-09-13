@@ -7,11 +7,15 @@
                 "features": "功能",
                 "hotkeys": "快捷键"
             },
-            "hotkeysHint": "点一下快捷键即可重新绑定，然后按下组合键或鼠标键；捕获时按 Esc 取消。",
+            "hotkeysHint": "点一下快捷键即可重新绑定，然后按下组合键或鼠标键；捕获时按 Esc 解绑（清空）。",
             "capturing": "按下按键…",
-            "cancelHint": "Esc 取消",
+            "unbindHint": "Esc 解绑（清空这个键位）",
             "rebindHint": "点击以重新绑定",
+            "keyConflict": "这个键位和另一条绑定重复，会一起触发；点一下可以改",
+            "keyOverlap": "这个键位和另一条绑定有前缀重叠（比如 X 与 X + C），会互相干扰；点一下可以改",
             "rebound": "快捷键已更新",
+            "unbound": "快捷键已解绑",
+            "reset": "快捷键已重置",
             "noFeatures": "还没有登记任何功能。",
             "binding": {
                 "menuToggle": "打开 / 关闭菜单"
@@ -34,6 +38,14 @@
             "description": "打开 Mangrove 菜单"
         },
         "feature": {
+            "AutoTool": {
+                "name": "自动切换工具",
+                "enabled": "启用",
+                "minDamage": "最低耐久",
+                "on": "自动切换工具已启用",
+                "off": "自动切换工具已禁用",
+                "failed": "自动切换工具启用失败，详见日志"
+            },
             "FreeCamera": {
                 "name": "自由视角",
                 "enabled": "启用",

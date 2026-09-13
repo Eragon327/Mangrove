@@ -75,10 +75,20 @@ void drawHotkeys() {
     ImGui::TextDisabled("%s", "mangrove.menu.hotkeysHint"_tr().c_str());
     ImGui::Spacing();
 
-    widgets::keyRow(Overlay::kMenuToggleBinding, "mangrove.menu.binding.menuToggle"_tr());
+    widgets::keyRow(
+        Overlay::kMenuToggleBinding,
+        "mangrove.menu.binding.menuToggle"_tr(),
+        Overlay::defaultMenuToggleKeys()
+    );
 
     for (auto* feature : core::FeatureManager::getInstance().features()) {
-        if (feature && feature->defaultHotkey()) widgets::keyRow(feature->bindingName(), feature->displayName());
+        if (!feature) continue;
+
+        // `nullopt` = 这个功能不占热键（连行都没有）；**空的 KeyBind** 是「有槽但默认没绑」，
+        // 照样列出来 —— 玩家可以自己绑一个。
+        auto const defaults = feature->defaultHotkey();
+        if (!defaults) continue;
+        widgets::keyRow(feature->bindingName(), feature->displayName(), *defaults);
     }
 }
 
